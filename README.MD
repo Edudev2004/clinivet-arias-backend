@@ -39,7 +39,7 @@
 
 | Capa                 | Tecnología                          |
 | -------------------- | ----------------------------------- |
-| Frontend             | React 18 + Tailwind CSS             |
+| Frontend             | Angular 17+ + Tailwind CSS          |
 | Backend              | Java 21 + Spring Boot 3.x           |
 | Base de datos        | PostgreSQL 15 (alojado en Supabase) |
 | Autenticación        | JWT (Spring Security)               |
@@ -58,10 +58,11 @@ El sistema sigue el patrón de **arquitectura de 3 capas** (Three-Tier Architect
 ```
 ┌─────────────────────────────────────────────┐
 │             CAPA DE PRESENTACIÓN            │
-│         React 18 + Tailwind CSS             │
-│  - Componentes de UI (formularios, tablas)  │
-│  - Gestión de estado (useState, Context)    │
-│  - Consumo de API REST via fetch/axios      │
+│         Angular 17+ + Tailwind CSS          │
+│  - Arquitectura Feature-Driven (por módulos)│
+│  - Componentes Standalone / UI reutilizable │
+│  - Estado reactivo (Signals / RxJS)         │
+│  - Consumo de API REST vía HttpClient       │
 │                  Vercel                     │
 └────────────────────┬────────────────────────┘
                      │ HTTP / JSON
@@ -94,7 +95,7 @@ El sistema sigue el patrón de **arquitectura de 3 capas** (Three-Tier Architect
 ### Flujo de una petición (ejemplo: agendar cita)
 
 ```
-Usuario (React)
+Usuario (Angular)
   → POST /api/citas
     → CitaController.crearCita()
       → CitaService.validarDisponibilidad()   ← RN-03: no doble cita mismo vet
@@ -135,17 +136,24 @@ com.clinivet.arias
 
 ```
 clinivet-arias/
-├── frontend/                  ← Proyecto React
+├── frontend/                  ← Proyecto Angular (Feature-Driven)
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── citas/
-│   │   │   ├── mascotas/
-│   │   │   ├── inventario/
-│   │   │   └── shared/
-│   │   ├── pages/
-│   │   ├── hooks/
-│   │   ├── services/          ← Llamadas a la API
-│   │   └── App.jsx
+│   │   ├── app/
+│   │   │   ├── core/          ← Servicios globales, interceptores HTTP, guards
+│   │   │   ├── shared/        ← Componentes UI reutilizables, pipes, directivas
+│   │   │   └── features/      ← Modular por características de negocio
+│   │   │       ├── auth/
+│   │   │       ├── citas/
+│   │   │       │   ├── components/
+│   │   │       │   ├── pages/
+│   │   │       │   └── services/
+│   │   │       ├── consultas/
+│   │   │       ├── mascotas/
+│   │   │       └── inventario/
+│   │   ├── environments/      ← Configuración de variables de entorno
+│   │   ├── main.ts
+│   │   └── styles.css
+│   ├── angular.json
 │   ├── package.json
 │   └── tailwind.config.js
 │
@@ -306,7 +314,7 @@ server:
 
 4. Verificar que el servidor esté corriendo: `http://localhost:8080/api/auth/login`
 
-### 6.4 Configurar el frontend (React)
+### 6.4 Configurar el frontend (Angular)
 
 1. Instalar dependencias:
 
@@ -315,19 +323,23 @@ cd ../frontend
 npm install
 ```
 
-2. Crear el archivo `.env.local`:
+2. Configurar la URL de la API en `src/environments/environment.development.ts`:
 
-```env
-VITE_API_URL=http://localhost:8080/api
+```typescript
+export const environment = {
+  production: false,
+  apiUrl: 'http://localhost:8080/api'
+};
 ```
 
 3. Ejecutar en desarrollo:
 
 ```bash
-npm run dev
+ng serve
+# o alternativamente: npm start
 ```
 
-La aplicación estará disponible en `http://localhost:5173`.
+La aplicación estará disponible en `http://localhost:4200`.
 
 ### 6.5 Datos de prueba
 
