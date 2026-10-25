@@ -19,6 +19,7 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -26,7 +27,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * Pruebas unitarias para {@link AuthServiceImpl} utilizando JUnit 5 y Mockito.
- * Valida los criterios de aceptación de RF-01 y RF-02.
+ * Valida los criterios de aceptación de RF-01 y RF-02 con identificadores UUID (APF2).
  */
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -44,17 +45,19 @@ class AuthServiceTest {
     private AuthServiceImpl authService;
 
     private Usuario usuarioPrueba;
+    private final UUID userId = UUID.fromString("b0000000-0000-0000-0000-000000000001");
+    private final UUID rolId = UUID.fromString("a0000000-0000-0000-0000-000000000001");
 
     @BeforeEach
     void setUp() {
+        Rol rolAdmin = new Rol(rolId, "ADMINISTRADOR", "Acceso total");
         usuarioPrueba = new Usuario(
-                1L,
+                userId,
                 "Rommel",
                 "Navarro",
                 "admin@clinivet.pe",
                 "$2a$10$encryptedHashPassword",
-                "987654321",
-                Rol.ADMIN,
+                rolAdmin,
                 true
         );
     }
@@ -76,9 +79,10 @@ class AuthServiceTest {
         assertNotNull(response);
         assertEquals("mocked.jwt.token", response.getToken());
         assertEquals("Bearer", response.getTipo());
-        assertEquals("ADMIN", response.getRol());
+        assertEquals("ADMINISTRADOR", response.getRol());
         assertEquals("admin@clinivet.pe", response.getEmail());
         assertEquals("Rommel", response.getNombres());
+        assertEquals(userId, response.getIdUsuario());
 
         verify(usuarioRepository, times(1)).findByEmail("admin@clinivet.pe");
         verify(passwordEncoder, times(1)).matches("Admin123!", usuarioPrueba.getPasswordHash());

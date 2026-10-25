@@ -2,25 +2,26 @@ package com.clinivet.arias.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Entidad JPA que representa a un usuario del personal de la clínica.
- * Mapea la tabla {@code usuarios} en PostgreSQL (Supabase).
+ * Mapea la tabla {@code usuarios} en PostgreSQL con UUID según el modelo físico de APF2 (Tabla 28).
  */
 @Entity
 @Table(name = "usuarios")
 public class Usuario {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id_usuario")
-    private Long idUsuario;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id")
+    private UUID id;
 
-    @Column(name = "nombres", nullable = false, length = 100)
-    private String nombres;
+    @Column(name = "nombre", nullable = false, length = 100)
+    private String nombre;
 
-    @Column(name = "apellidos", nullable = false, length = 100)
-    private String apellidos;
+    @Column(name = "apellido", nullable = false, length = 100)
+    private String apellido;
 
     @Column(name = "email", nullable = false, unique = true, length = 150)
     private String email;
@@ -28,68 +29,104 @@ public class Usuario {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
-    @Column(name = "telefono", length = 20)
-    private String telefono;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "rol", nullable = false, length = 30)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "rol_id", nullable = false)
     private Rol rol;
 
     @Column(name = "activo", nullable = false)
     private Boolean activo = true;
 
-    @Column(name = "fecha_creacion", updatable = false)
-    private LocalDateTime fechaCreacion;
+    @Column(name = "ultimo_login")
+    private LocalDateTime ultimoLogin;
+
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        if (this.fechaCreacion == null) {
-            this.fechaCreacion = LocalDateTime.now();
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
+        if (this.updatedAt == null) {
+            this.updatedAt = LocalDateTime.now();
         }
         if (this.activo == null) {
             this.activo = true;
         }
     }
 
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+
     public Usuario() {
     }
 
-    public Usuario(Long idUsuario, String nombres, String apellidos, String email,
-                   String passwordHash, String telefono, Rol rol, Boolean activo) {
-        this.idUsuario = idUsuario;
-        this.nombres = nombres;
-        this.apellidos = apellidos;
+    public Usuario(UUID id, String nombre, String apellido, String email,
+                   String passwordHash, Rol rol, Boolean activo) {
+        this.id = id;
+        this.nombre = nombre;
+        this.apellido = apellido;
         this.email = email;
         this.passwordHash = passwordHash;
-        this.telefono = telefono;
         this.rol = rol;
         this.activo = activo;
-        this.fechaCreacion = LocalDateTime.now();
     }
 
     // Getters y Setters
-    public Long getIdUsuario() {
-        return idUsuario;
+    public UUID getId() {
+        return id;
     }
 
-    public void setIdUsuario(Long idUsuario) {
-        this.idUsuario = idUsuario;
+    public void setId(UUID id) {
+        this.id = id;
     }
 
+    // Alias para compatibilidad con código existente
+    public UUID getIdUsuario() {
+        return id;
+    }
+
+    public void setIdUsuario(UUID id) {
+        this.id = id;
+    }
+
+    public String getNombre() {
+        return nombre;
+    }
+
+    public void setNombre(String nombre) {
+        this.nombre = nombre;
+    }
+
+    // Alias para compatibilidad
     public String getNombres() {
-        return nombres;
+        return nombre;
     }
 
     public void setNombres(String nombres) {
-        this.nombres = nombres;
+        this.nombre = nombres;
     }
 
+    public String getApellido() {
+        return apellido;
+    }
+
+    public void setApellido(String apellido) {
+        this.apellido = apellido;
+    }
+
+    // Alias para compatibilidad
     public String getApellidos() {
-        return apellidos;
+        return apellido;
     }
 
     public void setApellidos(String apellidos) {
-        this.apellidos = apellidos;
+        this.apellido = apellidos;
     }
 
     public String getEmail() {
@@ -108,14 +145,6 @@ public class Usuario {
         this.passwordHash = passwordHash;
     }
 
-    public String getTelefono() {
-        return telefono;
-    }
-
-    public void setTelefono(String telefono) {
-        this.telefono = telefono;
-    }
-
     public Rol getRol() {
         return rol;
     }
@@ -132,11 +161,27 @@ public class Usuario {
         this.activo = activo;
     }
 
-    public LocalDateTime getFechaCreacion() {
-        return fechaCreacion;
+    public LocalDateTime getUltimoLogin() {
+        return ultimoLogin;
     }
 
-    public void setFechaCreacion(LocalDateTime fechaCreacion) {
-        this.fechaCreacion = fechaCreacion;
+    public void setUltimoLogin(LocalDateTime ultimoLogin) {
+        this.ultimoLogin = ultimoLogin;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

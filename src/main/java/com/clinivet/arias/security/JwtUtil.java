@@ -44,10 +44,10 @@ public class JwtUtil {
      */
     public String generateToken(Usuario usuario) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("idUsuario", usuario.getIdUsuario());
-        claims.put("rol", usuario.getRol().name());
-        claims.put("nombres", usuario.getNombres());
-        claims.put("apellidos", usuario.getApellidos());
+        claims.put("idUsuario", usuario.getId() != null ? usuario.getId().toString() : null);
+        claims.put("rol", usuario.getRol() != null ? usuario.getRol().getNombre() : "USER");
+        claims.put("nombres", usuario.getNombre());
+        claims.put("apellidos", usuario.getApellido());
 
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expirationMs);
@@ -61,44 +61,32 @@ public class JwtUtil {
                 .compact();
     }
 
-    /**
-     * Extrae el email (subject) del token JWT.
-     */
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
-    /**
-     * Extrae un claim específico mediante una función resolvedora.
-     */
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
-    /**
-     * Valida la firma y vigencia del token contra un email.
-     */
-    public boolean isTokenValid(String token, String username) {
+    public boolean validateToken(String token, String username) {
         try {
             final String tokenUsername = extractUsername(token);
-            return (tokenUsername.equalsIgnoreCase(username) && !isTokenExpired(token));
+            return (tokenUsername.equals(username) && !isTokenExpired(token));
         } catch (JwtException | IllegalArgumentException e) {
-            log.warn("Fallo en validación de token JWT: {}", e.getMessage());
+            log.warn("Fallo de validación de JWT: {}", e.getMessage());
             return false;
         }
     }
 
-    public boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+    public boolean isTokenValid(String token, String username) {
+        return validateToken(token, username);
     }
 
-    public Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
-    }
-
-    public long getExpirationMs() {
-        return expirationMs;
+    private boolean isTokenExpired(String token) {
+        final Date expiration = extractClaim(token, Claims::getExpiration);
+        return expiration.before(new Date());
     }
 
     private Claims extractAllClaims(String token) {
@@ -107,5 +95,9 @@ public class JwtUtil {
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+
+    public long getExpirationMs() {
+        return expirationMs;
     }
 }

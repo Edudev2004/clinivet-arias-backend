@@ -1,10 +1,11 @@
 package com.clinivet.arias.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.UUID;
 
 /**
  * DTO que encapsula la respuesta tras una autenticación exitosa.
- * Incluye el token JWT y datos de identidad y perfil del usuario.
+ * Incluye el token JWT y datos de identidad y perfil del usuario según APF2.
  */
 @Schema(description = "Respuesta de autenticación exitosa con JWT y perfil de usuario")
 public class LoginResponse {
@@ -15,8 +16,8 @@ public class LoginResponse {
     @Schema(description = "Tipo de autorización", example = "Bearer")
     private String tipo = "Bearer";
 
-    @Schema(description = "Identificador único del usuario", example = "1")
-    private Long idUsuario;
+    @Schema(description = "Identificador único UUID del usuario", example = "b0000000-0000-0000-0000-000000000001")
+    private UUID idUsuario;
 
     @Schema(description = "Correo electrónico del usuario", example = "admin@clinivet.pe")
     private String email;
@@ -27,7 +28,7 @@ public class LoginResponse {
     @Schema(description = "Apellidos del usuario", example = "Navarro")
     private String apellidos;
 
-    @Schema(description = "Rol asignado para control de acceso", example = "ADMIN")
+    @Schema(description = "Rol asignado para control de acceso", example = "ADMINISTRADOR")
     private String rol;
 
     @Schema(description = "Milisegundos de validez del token", example = "86400000")
@@ -36,7 +37,7 @@ public class LoginResponse {
     public LoginResponse() {
     }
 
-    public LoginResponse(String token, Long idUsuario, String email, String nombres,
+    public LoginResponse(String token, UUID idUsuario, String email, String nombres,
                          String apellidos, String rol, Long expiresIn) {
         this.token = token;
         this.tipo = "Bearer";
@@ -65,11 +66,11 @@ public class LoginResponse {
         this.tipo = tipo;
     }
 
-    public Long getIdUsuario() {
+    public UUID getIdUsuario() {
         return idUsuario;
     }
 
-    public void setIdUsuario(Long idUsuario) {
+    public void setIdUsuario(UUID idUsuario) {
         this.idUsuario = idUsuario;
     }
 

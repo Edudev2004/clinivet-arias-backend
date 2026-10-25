@@ -18,6 +18,8 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.UUID;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -26,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Pruebas unitarias de capa Web para {@link AuthController} con MockMvc.
- * Valida los códigos de respuesta HTTP y la serialización JSON.
+ * Valida los códigos de respuesta HTTP y la serialización JSON con UUID.
  */
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
@@ -40,6 +42,7 @@ class AuthControllerTest {
     private AuthController authController;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final UUID sampleUserId = UUID.fromString("b0000000-0000-0000-0000-000000000001");
 
     @BeforeEach
     void setUp() {
@@ -54,11 +57,11 @@ class AuthControllerTest {
         LoginRequest request = new LoginRequest("admin@clinivet.pe", "Admin123!");
         LoginResponse response = new LoginResponse(
                 "token.jwt.valido",
-                1L,
+                sampleUserId,
                 "admin@clinivet.pe",
                 "Rommel",
                 "Navarro",
-                "ADMIN",
+                "ADMINISTRADOR",
                 86400000L
         );
 
@@ -69,14 +72,15 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").value("token.jwt.valido"))
+                .andExpect(jsonPath("$.rol").value("ADMINISTRADOR"))
                 .andExpect(jsonPath("$.email").value("admin@clinivet.pe"))
-                .andExpect(jsonPath("$.rol").value("ADMIN"));
+                .andExpect(jsonPath("$.idUsuario").value(sampleUserId.toString()));
     }
 
     @Test
-    @DisplayName("POST /api/auth/login retorna 401 Unauthorized cuando las credenciales son incorrectas")
+    @DisplayName("POST /api/auth/login retorna 401 Unauthorized cuando las credenciales son inválidas")
     void login_CredencialesInvalidas_Retorna401() throws Exception {
-        LoginRequest request = new LoginRequest("admin@clinivet.pe", "ClaveErronea");
+        LoginRequest request = new LoginRequest("admin@clinivet.pe", "ClaveIncorrecta");
 
         when(authService.login(any(LoginRequest.class)))
                 .thenThrow(new BadCredentialsException("Usuario o contraseña incorrectos"));
@@ -106,9 +110,10 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/auth/logout retorna 200 OK con mensaje de éxito")
-    void logout_Retorna200Ok() throws Exception {
-        mockMvc.perform(post("/api/auth/logout"))
+    @DisplayName("POST /api/auth/logout retorna 200 OK con mensaje de cierre exitoso")
+    void logout_PeticionValida_Retorna200Ok() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer token.jwt.valido"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.mensaje").value("Sesión cerrada correctamente"));
     }

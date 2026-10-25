@@ -84,15 +84,16 @@ public class AuthServiceImpl implements IAuthService {
 
         // Generar token JWT con claims de usuario y rol
         String token = jwtUtil.generateToken(usuario);
-        log.info("Inicio de sesión exitoso para usuario [{}] con rol [{}]", usuario.getEmail(), usuario.getRol());
+        String rolNombre = usuario.getRol() != null ? usuario.getRol().getNombre() : "USER";
+        log.info("Inicio de sesión exitoso para usuario [{}] con rol [{}]", usuario.getEmail(), rolNombre);
 
         return new LoginResponse(
                 token,
-                usuario.getIdUsuario(),
+                usuario.getId(),
                 usuario.getEmail(),
-                usuario.getNombres(),
-                usuario.getApellidos(),
-                usuario.getRol().name(),
+                usuario.getNombre(),
+                usuario.getApellido(),
+                rolNombre,
                 jwtUtil.getExpirationMs()
         );
     }

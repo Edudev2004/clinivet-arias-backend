@@ -5,13 +5,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Repositorio de acceso a datos para la entidad {@link Usuario}.
- * Aplica el patrón DAO mediante Spring Data JPA.
+ * Utiliza identificador UUID conforme al modelo físico de APF2.
  */
 @Repository
-public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
+public interface UsuarioRepository extends JpaRepository<Usuario, UUID> {
 
     /**
      * Busca un usuario por su correo electrónico institucional.
