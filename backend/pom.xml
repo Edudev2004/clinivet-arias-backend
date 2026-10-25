@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- ============================================================
+         Coordenadas del artefacto
+         ============================================================ -->
+    <groupId>com.clinivet</groupId>
+    <artifactId>arias-backend</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>clinivet-arias-backend</name>
+    <description>Backend del sistema de gestión veterinaria Clinivet Arias — UTP Grupo 5</description>
+
+    <!-- ============================================================
+         Spring Boot Parent: centraliza versiones de dependencias
+         y plugins de Maven para proyectos Spring Boot.
+         ============================================================ -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+        <relativePath/>
+    </parent>
+
+    <!-- ============================================================
+         Propiedades globales
+         ============================================================ -->
+    <properties>
+        <java.version>21</java.version>
+        <!-- Versiones centralizadas (principio DRY) -->
+        <jjwt.version>0.12.6</jjwt.version>
+        <guava.version>33.2.1-jre</guava.version>
+        <commons-lang3.version>3.14.0</commons-lang3.version>
+        <poi.version>5.3.0</poi.version>
+        <springdoc.version>2.6.0</springdoc.version>
+    </properties>
+
+    <!-- ============================================================
+         DEPENDENCIAS
+         Agrupadas por capas para facilitar la lectura y sustentación.
+         ============================================================ -->
+    <dependencies>
+
+        <!-- ── CAPA WEB / API REST ───────────────────────────────── -->
+
+        <!--
+            spring-boot-starter-web
+            Arranca el servidor embebido Tomcat, habilita @RestController,
+            @GetMapping, @PostMapping, etc. Es la base de nuestra capa MVC.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+            spring-boot-starter-validation
+            Activa Bean Validation (Jakarta) para validar DTOs con
+            @NotBlank, @Email, @Size, etc. directamente en los controllers.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- ── CAPA DE DATOS / DAO ───────────────────────────────── -->
+
+        <!--
+            spring-boot-starter-data-jpa
+            Integra Hibernate (implementación JPA) con Spring.
+            Nuestra capa DAO se basa en repositorios que extienden
+            JpaRepository<Entidad, TipoId>.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!--
+            postgresql
+            Driver JDBC para conectarse a PostgreSQL (Supabase).
+            scope=runtime: solo se necesita en ejecución, no en compilación.
+        -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ── SEGURIDAD ─────────────────────────────────────────── -->
+
+        <!--
+            spring-boot-starter-security
+            Habilita Spring Security: filtros HTTP, contexto de autenticación,
+            configuración de roles y BCryptPasswordEncoder.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!--
+            jjwt-api  — Interfaz pública de JJWT (JSON Web Tokens).
+            jjwt-impl — Implementación interna (scope=runtime).
+            jjwt-jackson — Serialización JSON de claims con Jackson (runtime).
+            Juntos permiten firmar, emitir y validar tokens JWT con clave secreta.
+        -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ── LIBRERÍAS OBLIGATORIAS DEL CURSO ─────────────────── -->
+
+        <!--
+            Google Guava
+            Colecciones inmutables (ImmutableList, ImmutableMap),
+            Preconditions.checkArgument() para validaciones defensivas
+            en la capa de servicio, y utilidades funcionales.
+        -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>${guava.version}</version>
+        </dependency>
+
+        <!--
+            Apache Commons Lang3
+            StringUtils.isNotBlank(), StringUtils.stripAccents(),
+            y otras utilidades de manejo de cadenas para sanitizar
+            inputs antes de procesarlos en los servicios.
+        -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>${commons-lang3.version}</version>
+        </dependency>
+
+        <!--
+            Apache POI (poi-ooxml)
+            Generación de reportes en formato Excel (.xlsx).
+            Se usará en el servicio de exportación de citas y pacientes.
+        -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+
+        <!--
+            Logback Classic
+            Ya viene incluido transitivamente por spring-boot-starter,
+            pero se declara explícitamente para configurarlo en
+            logback-spring.xml (rotación de archivos, niveles por paquete,
+            enmascaramiento de datos sensibles).
+        -->
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+        </dependency>
+
+        <!-- ── DOCUMENTACIÓN DE API ──────────────────────────────── -->
+
+        <!--
+            Springdoc OpenAPI
+            Genera la documentación Swagger UI automáticamente leyendo
+            las anotaciones de los controllers. Disponible en
+            http://localhost:8080/swagger-ui/index.html
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+
+        <!-- ── PRUEBAS (TDD) ──────────────────────────────────────── -->
+
+        <!--
+            spring-boot-starter-test
+            Incluye JUnit 5 (Jupiter), AssertJ, Hamcrest y
+            Spring Test (MockMvc, @WebMvcTest, @SpringBootTest).
+            scope=test: no se empaqueta en el .jar de producción.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Spring Security Test
+            Provee @WithMockUser y SecurityMockMvcRequestPostProcessors
+            para testear endpoints protegidos sin levantar JWT real.
+        -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Mockito Core
+            Framework de mocking para aislar la unidad bajo prueba.
+            Permite simular repositorios y servicios en tests unitarios.
+        -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            H2 Database
+            Base de datos en memoria para los tests de integración.
+            Evita depender de Supabase (red externa) en el pipeline de CI.
+        -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ============================================================
+         BUILD
+         spring-boot-maven-plugin empaqueta la aplicación como un
+         fat JAR ejecutable con java -jar.
+         ============================================================ -->
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
