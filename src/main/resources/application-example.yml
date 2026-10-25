@@ -6,7 +6,7 @@
 # de muestra. NUNCA pegar aquí credenciales reales.
 #
 # Para ejecutar la aplicación, copia este archivo a:
-#   backend/src/main/resources/application.yml
+#   src/main/resources/application.yml
 # (ese archivo está en .gitignore y no se sube al repo)
 # y completa los valores marcados con <COMPLETAR>.
 # ============================================================
@@ -67,4 +67,4 @@ logging:
     # Desactivar logs detallados de Hibernate en producción
     org.hibernate.SQL: WARN
   # Configuración avanzada (rotación, formato) en:
-  # backend/src/main/resources/logback-spring.xml
+  # src/main/resources/logback-spring.xml

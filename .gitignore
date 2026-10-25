@@ -5,12 +5,12 @@
 # --- Secretos y configuración local ---
 # application.yml contiene credenciales reales: BD, JWT, etc.
 # NUNCA subir al repo. Usar application-example.yml como plantilla.
-backend/src/main/resources/application.yml
-backend/src/main/resources/application-*.yml
-!backend/src/main/resources/application-example.yml
+src/main/resources/application.yml
+src/main/resources/application-*.yml
+!src/main/resources/application-example.yml
 
 # --- Compilados y empaquetados de Maven ---
-backend/target/
+target/
 *.class
 *.jar
 *.war
@@ -45,15 +45,11 @@ desktop.ini
 logs/
 
 # --- Maven Wrapper (generado localmente) ---
-!backend/.mvn/
-!backend/mvnw
-!backend/mvnw.cmd
+!.mvn/
+!mvnw
+!mvnw.cmd
 
 # --- Variables de entorno ---
 .env
 *.env
 
-# --- Node / Angular (frontend futuro) ---
-frontend/node_modules/
-frontend/dist/
-frontend/.angular/

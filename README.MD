@@ -95,13 +95,25 @@ El sistema sigue el patrón de **arquitectura de 3 capas** (Three-Tier Architect
 ┌─────────────────────────────────────────────┐
 │              CAPA DE DATOS                  │
 │         PostgreSQL 15 en Supabase           │
-│  - 15 tablas relacionales                   │
+│  - 16 tablas relacionales                   │
 │  - Triggers para auditoría                  │
 │  - Funciones para cálculo de dosis          │
 │  - Row Level Security (RLS)                 │
 │  - Enums: estado_cita, tipo_movimiento,     │
 │    tipo_notificacion                        │
 └─────────────────────────────────────────────┘
+```
+
+### Flujo de una petición: agendar cita
+
+```
+Usuario (Angular)
+  → POST /api/citas
+    → CitaController.crearCita()
+      → CitaService.validarDisponibilidad()   ← RN-03
+        → CitaRepository.save()
+          → PostgreSQL, tabla citas
+            ← 201 Created (CitaDTO)  |  409 Conflict si hay cruce de horario
 ```
 
 ### Principios SOLID aplicados
@@ -120,26 +132,23 @@ El sistema sigue el patrón de **arquitectura de 3 capas** (Three-Tier Architect
 
 ```
 clinivet-arias-backend/
-├── backend/                              ← Proyecto Spring Boot
-│   ├── src/
-│   │   ├── main/
-│   │   │   ├── java/com/clinivet/arias/
-│   │   │   │   ├── ClinivetAriasApplication.java  ← Punto de entrada
-│   │   │   │   ├── controller/           ← @RestController (MVC-C)
-│   │   │   │   ├── service/              ← Interfaces + @Service (lógica de negocio)
-│   │   │   │   ├── repository/           ← JpaRepository (DAO)
-│   │   │   │   ├── model/                ← @Entity JPA (MVC-M)
-│   │   │   │   ├── dto/                  ← Request/Response DTOs
-│   │   │   │   ├── security/             ← JWT + Spring Security
-│   │   │   │   └── config/               ← SecurityConfig, OpenApiConfig
-│   │   │   └── resources/
-│   │   │       ├── application-example.yml  ← Plantilla sin secretos ✓
-│   │   │       └── logback-spring.xml       ← Configuración de logs
-│   │   └── test/java/com/clinivet/arias/    ← Tests JUnit 5 + Mockito
-│   └── pom.xml
-│
-├── frontend/                             ← Proyecto Angular (próximo sprint)
+├── src/
+│   ├── main/
+│   │   ├── java/com/clinivet/arias/
+│   │   │   ├── ClinivetAriasApplication.java  ← Punto de entrada
+│   │   │   ├── controller/           ← @RestController (MVC-C)
+│   │   │   ├── service/              ← Interfaces + @Service (lógica de negocio)
+│   │   │   ├── repository/           ← JpaRepository (DAO)
+│   │   │   ├── model/                ← @Entity JPA (MVC-M)
+│   │   │   ├── dto/                  ← Request/Response DTOs
+│   │   │   ├── security/             ← JWT + Spring Security
+│   │   │   └── config/               ← SecurityConfig, OpenApiConfig
+│   │   └── resources/
+│   │       ├── application-example.yml  ← Plantilla sin secretos ✓
+│   │       └── logback-spring.xml       ← Configuración de logs
+│   └── test/java/com/clinivet/arias/    ← Tests JUnit 5 + Mockito
 ├── database/                             ← DDL SQL, seeds, migrations
+├── pom.xml                               ← Configuración Maven y dependencias
 ├── .gitignore
 └── README.md
 ```
@@ -213,6 +222,21 @@ clinivet-arias-backend/
 | `GET`  | `/api/reportes/citas`      | Exportar reporte de citas en `.xlsx` |
 | `GET`  | `/api/reportes/mascotas`   | Exportar listado de mascotas en `.xlsx` |
 
+### 5.8 Vacunas
+
+| Método | Endpoint                   | Descripción                               |
+| ------ | -------------------------- | ----------------------------------------- |
+| `GET`  | `/api/vacunas/catalogo`    | Catálogo de vacunas                       |
+| `POST` | `/api/vacunas/aplicadas`   | Registra una vacuna aplicada              |
+| `GET`  | `/api/mascotas/{id}/vacunas` | Historial de vacunación de una mascota  |
+
+### 5.9 Notificaciones
+
+| Método  | Endpoint                        | Descripción                             |
+| ------- | ------------------------------- | --------------------------------------- |
+| `GET`   | `/api/notificaciones`           | Notificaciones del usuario autenticado  |
+| `PATCH` | `/api/notificaciones/{id}/leer` | Marca una notificación como leída       |
+
 ---
 
 ## 6. Guía de instalación y configuración de la BD
@@ -229,14 +253,14 @@ clinivet-arias-backend/
 1. Crear un nuevo proyecto en Supabase.
 2. Ir a **SQL Editor** dentro del proyecto.
 3. Abrir el archivo `database/clinivet_schema.sql` y pegarlo en el editor.
-4. Ejecutar el script. Crea las 15 tablas, los enums, los índices y las restricciones.
+4. Ejecutar el script. Crea las 16 tablas, los enums, los índices y las restricciones.
 5. Ir a **Project Settings → Database** y copiar la **Connection String** (modo `URI`).
 
 ### 6.3 Configurar el backend
 
 ```bash
 git clone https://github.com/Edudev2004/clinivet-arias-backend.git
-cd clinivet-arias-backend/backend
+cd clinivet-arias-backend
 ```
 
 Copiar la plantilla y completar los valores:
@@ -259,11 +283,16 @@ Verificar: `http://localhost:8080/swagger-ui/index.html`
 ### 6.4 Ejecutar los tests
 
 ```bash
-cd backend
 ./mvnw test
+# o en Windows:
+mvnw.cmd test
 ```
 
 Los tests usan H2 (base de datos en memoria), no necesitan conexión a Supabase.
+
+### 6.5 Datos de prueba
+
+Ejecutar `database/seed_data.sql` en el SQL Editor de Supabase para cargar roles, especialidades y un usuario administrador de prueba (`admin@clinivet.pe`).
 
 ---
 
@@ -271,31 +300,31 @@ Los tests usan H2 (base de datos en memoria), no necesitan conexión a Supabase.
 
 ### 7.1 Estructura de ramas
 
-| Rama                              | Propósito                                                                    |
-| --------------------------------- | ---------------------------------------------------------------------------- |
-| `main`                            | Código en producción. Solo recibe merges desde `release/` o `hotfix/`.       |
-| `develop`                         | Rama de integración. Todas las feature branches terminan aquí.               |
-| `feature/RF-XX-descripcion-corta` | Una rama por requerimiento funcional. Nace de `develop`.                     |
-| `release/sprint-N`                | Se abre al cerrar cada sprint para estabilizar antes de pasar a `main`.      |
-| `hotfix/descripcion`              | Solo para bugs urgentes en producción, sale de `main`.                       |
+| Rama                        | Propósito                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `main`                      | Código en producción. Solo recibe merges desde `release/` o `hotfix/`.       |
+| `develop`                   | Rama de integración. Todas las feature branches terminan aquí.               |
+| `feature/US-XX-descripcion` | Una rama por historia de usuario. Nace de `develop`.                         |
+| `release/sprint-N`          | Se abre al cerrar cada sprint para estabilizar antes de pasar a `main`.      |
+| `hotfix/descripcion`        | Solo para bugs urgentes en producción, sale de `main`.                       |
 
 > **Importante:** Al mergear una feature, **NO borrar la rama**. Sirve de evidencia del trabajo realizado.
 
 ### 7.2 Flujo diario
 
 ```bash
-# Antes de empezar un requerimiento
+# Antes de empezar una historia de usuario
 git checkout develop
 git pull origin develop
-git checkout -b feature/RF-01-endpoint-login
+git checkout -b feature/US-14-agendar-cita
 
-# Trabajar y commitear en español sin prefijos
+# Trabajar y commitear en español sin prefijos (feat:, fix:)
 git add .
-git commit -m "Agregar test de login correcto con JWT"
-git commit -m "Implementar endpoint POST /api/auth/login"
+git commit -m "Agregar validación de disponibilidad del veterinario en agendamiento"
 
 # Subir la rama y abrir Pull Request hacia develop
-git push origin feature/RF-01-endpoint-login
+git push origin feature/US-14-agendar-cita
+# Luego: Pull Request  base: develop  <-  compare: feature/US-14-agendar-cita
 ```
 
 ---
