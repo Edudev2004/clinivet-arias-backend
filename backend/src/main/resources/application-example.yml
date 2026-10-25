@@ -1,0 +1,70 @@
+# ============================================================
+# application-example.yml — Plantilla de configuración
+#
+# IMPORTANTE: Este archivo ES seguro para subir al repositorio.
+# Contiene ÚNICAMENTE claves de ejemplo con valores vacíos o
+# de muestra. NUNCA pegar aquí credenciales reales.
+#
+# Para ejecutar la aplicación, copia este archivo a:
+#   backend/src/main/resources/application.yml
+# (ese archivo está en .gitignore y no se sube al repo)
+# y completa los valores marcados con <COMPLETAR>.
+# ============================================================
+
+spring:
+
+  # ── Base de datos (PostgreSQL en Supabase) ──────────────────
+  datasource:
+    # Connection String del proyecto en Supabase:
+    # Project Settings → Database → URI mode
+    url: jdbc:postgresql://db.<REF_SUPABASE>.supabase.co:5432/postgres
+    username: postgres
+    password: <COMPLETAR>
+    driver-class-name: org.postgresql.Driver
+
+  # ── JPA / Hibernate ─────────────────────────────────────────
+  jpa:
+    hibernate:
+      # validate: Hibernate verifica que las entidades coincidan
+      # con las tablas existentes. NO crea ni modifica tablas.
+      # (las tablas se crean con database/clinivet_schema.sql)
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+# ── JWT ─────────────────────────────────────────────────────
+jwt:
+  # Clave secreta para firmar los tokens. Mínimo 256 bits (32 caracteres).
+  # Generar con: openssl rand -base64 64
+  secret: <COMPLETAR_CLAVE_MINIMO_256_BITS>
+  # Tiempo de expiración del token en milisegundos.
+  # 86400000 = 24 horas
+  expiration-ms: 86400000
+
+# ── Servidor ─────────────────────────────────────────────────
+server:
+  port: 8080
+  # Prefijo global de todos los endpoints de la API
+  servlet:
+    context-path: /
+
+# ── Documentación Swagger / OpenAPI ──────────────────────────
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# ── Logging con Logback ──────────────────────────────────────
+logging:
+  # Nivel raíz: INFO en producción, DEBUG en desarrollo
+  level:
+    root: INFO
+    com.clinivet.arias: DEBUG
+    # Desactivar logs detallados de Hibernate en producción
+    org.hibernate.SQL: WARN
+  # Configuración avanzada (rotación, formato) en:
+  # backend/src/main/resources/logback-spring.xml
