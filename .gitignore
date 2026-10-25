@@ -52,5 +52,3 @@ logs/
 # --- Variables de entorno ---
 .env
 *.env
-
-.agents
