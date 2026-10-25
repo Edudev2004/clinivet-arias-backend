@@ -1,6 +1,6 @@
-# Clinivet Arias — Documentación Técnica
+# Clinivet Arias — Backend
 
-> Sistema de gestión veterinaria desarrollado con arquitectura de 3 capas.  
+> Sistema de gestión veterinaria · Backend Java/Spring Boot  
 > Curso: Desarrollo de Software · UTP · Grupo 5
 
 ---
@@ -9,12 +9,13 @@
 
 1. [Descripción del proyecto](#1-descripción-del-proyecto)
 2. [Stack tecnológico](#2-stack-tecnológico)
-3. [Arquitectura de 3 capas](#3-arquitectura-de-3-capas)
+3. [Arquitectura de 3 capas y SOLID](#3-arquitectura-de-3-capas-y-solid)
 4. [Estructura del repositorio](#4-estructura-del-repositorio)
 5. [Módulos y endpoints principales](#5-módulos-y-endpoints-principales)
 6. [Guía de instalación y configuración de la BD](#6-guía-de-instalación-y-configuración-de-la-bd)
 7. [Flujo de trabajo Git (Gitflow)](#7-flujo-de-trabajo-git-gitflow)
 8. [Gestión de tareas con GitHub Projects](#8-gestión-de-tareas-con-github-projects)
+9. [Equivalencias framework vs. conceptos del curso](#9-equivalencias-framework-vs-conceptos-del-curso)
 
 ---
 
@@ -26,12 +27,14 @@
 
 **Alcance del sistema:**
 
+- Autenticación segura con JWT y control de roles (Administrador, Veterinario, Recepcionista)
 - Registro y gestión de propietarios y mascotas
-- Agendamiento de citas con validación de disponibilidad del veterinario
+- Agendamiento de citas con validación de disponibilidad del veterinario (RN-03)
 - Registro de consultas con diagnóstico y tratamiento
 - Historial de vacunación por mascota
 - Control de inventario por lotes con alertas de stock bajo y vencimiento
 - Notificaciones internas al personal
+- Exportación de reportes en Excel (Apache POI)
 
 ---
 
@@ -42,16 +45,25 @@
 | Frontend             | Angular 17+ + Tailwind CSS          |
 | Backend              | Java 21 + Spring Boot 3.x           |
 | Base de datos        | PostgreSQL 15 (alojado en Supabase) |
-| Autenticación        | JWT (Spring Security)               |
+| Autenticación        | JWT (Spring Security + JJWT 0.12)   |
 | Despliegue frontend  | Vercel                              |
 | Despliegue backend   | Render / Azure App Service          |
 | Control de versiones | Git + GitHub                        |
 | Gestión de tareas    | GitHub Projects (Kanban)            |
-| Documentación API    | Swagger / OpenAPI 3.0               |
+| Documentación API    | Swagger / OpenAPI 3.0 (Springdoc)   |
+
+**Librerías obligatorias del curso:**
+
+| Librería           | Versión   | Uso en el proyecto                                              |
+| ------------------ | --------- | --------------------------------------------------------------- |
+| Google Guava       | 33.2.1    | `Preconditions` en servicios, colecciones inmutables            |
+| Apache Commons Lang3 | 3.14.0 | `StringUtils` para sanitizar inputs en la capa de servicio      |
+| Apache POI         | 5.3.0     | Generación de reportes `.xlsx` (citas, pacientes)               |
+| Logback Classic    | (Spring)  | Logs estructurados, rotación de archivos, enmascaramiento de datos sensibles |
 
 ---
 
-## 3. Arquitectura de 3 capas
+## 3. Arquitectura de 3 capas y SOLID
 
 El sistema sigue el patrón de **arquitectura de 3 capas** (Three-Tier Architecture), separando responsabilidades entre presentación, lógica de negocio y datos.
 
@@ -72,7 +84,7 @@ El sistema sigue el patrón de **arquitectura de 3 capas** (Three-Tier Architect
 │         Java 21 + Spring Boot 3.x           │
 │  - Controllers  → reciben peticiones HTTP   │
 │  - Services     → reglas de negocio         │
-│  - Repositories → acceso a datos (JPA)      │
+│  - Repositories → acceso a datos (JPA/DAO)  │
 │  - DTOs / Mappers                           │
 │  - Validaciones (RN-01 a RN-12)             │
 │  - JWT Security (Spring Security)           │
@@ -92,90 +104,47 @@ El sistema sigue el patrón de **arquitectura de 3 capas** (Three-Tier Architect
 └─────────────────────────────────────────────┘
 ```
 
-### Flujo de una petición (ejemplo: agendar cita)
+### Principios SOLID aplicados
 
-```
-Usuario (Angular)
-  → POST /api/citas
-    → CitaController.crearCita()
-      → CitaService.validarDisponibilidad()   ← RN-03: no doble cita mismo vet
-        → CitaRepository.save()
-          → PostgreSQL tabla `citas`
-            ← Respuesta 201 Created (CitaDTO)
-```
-
-### Paquetes del backend (Spring Boot)
-
-```
-com.clinivet.arias
-├── controller/       ← Endpoints REST (@RestController)
-│   ├── CitaController.java
-│   ├── ConsultaController.java
-│   ├── MascotaController.java
-│   ├── InventarioController.java
-│   └── UsuarioController.java
-├── service/          ← Lógica de negocio (@Service)
-│   ├── CitaService.java
-│   ├── ConsultaService.java
-│   └── InventarioService.java
-├── repository/       ← Acceso a BD (@Repository, JPA)
-│   ├── CitaRepository.java
-│   └── MascotaRepository.java
-├── model/            ← Entidades JPA (@Entity)
-│   ├── Cita.java
-│   ├── Mascota.java
-│   └── ...
-├── dto/              ← Objetos de transferencia
-├── security/         ← JWT + Spring Security
-└── config/           ← Configuración CORS, Beans
-```
+| Principio | Dónde se aplica |
+| --------- | --------------- |
+| **S** — Single Responsibility | Cada clase tiene una única razón para cambiar: el `Controller` solo orquesta HTTP, el `Service` solo ejecuta reglas de negocio, el `Repository` solo persiste datos. |
+| **O** — Open/Closed | Los servicios se extienden mediante nuevas implementaciones de interfaz, sin modificar código existente (ej. `ExportadorService` → implementaciones Excel/PDF). |
+| **L** — Liskov Substitution | Las implementaciones de servicio y repositorio son sustituibles por sus interfaces sin alterar el comportamiento del sistema. |
+| **I** — Interface Segregation | Interfaces específicas por dominio (`IAuthService`, `ICitaService`) en lugar de una mega-interfaz. |
+| **D** — Dependency Inversion | Los `Controllers` dependen de interfaces `IXxxService`; los `Services` dependen de interfaces `JpaRepository`. Inyección por constructor en todas las capas. |
 
 ---
 
 ## 4. Estructura del repositorio
 
 ```
-clinivet-arias/
-├── frontend/                  ← Proyecto Angular (Feature-Driven)
+clinivet-arias-backend/
+├── backend/                              ← Proyecto Spring Boot
 │   ├── src/
-│   │   ├── app/
-│   │   │   ├── core/          ← Servicios globales, interceptores HTTP, guards
-│   │   │   ├── shared/        ← Componentes UI reutilizables, pipes, directivas
-│   │   │   └── features/      ← Modular por características de negocio
-│   │   │       ├── auth/
-│   │   │       ├── citas/
-│   │   │       │   ├── components/
-│   │   │       │   ├── pages/
-│   │   │       │   └── services/
-│   │   │       ├── consultas/
-│   │   │       ├── mascotas/
-│   │   │       └── inventario/
-│   │   ├── environments/      ← Configuración de variables de entorno
-│   │   ├── main.ts
-│   │   └── styles.css
-│   ├── angular.json
-│   ├── package.json
-│   └── tailwind.config.js
-│
-├── backend/                   ← Proyecto Spring Boot
-│   ├── src/main/java/com/clinivet/arias/
-│   │   ├── controller/
-│   │   ├── service/
-│   │   ├── repository/
-│   │   ├── model/
-│   │   ├── dto/
-│   │   └── security/
-│   ├── src/main/resources/
-│   │   └── application.yml
+│   │   ├── main/
+│   │   │   ├── java/com/clinivet/arias/
+│   │   │   │   ├── ClinivetAriasApplication.java  ← Punto de entrada
+│   │   │   │   ├── controller/           ← @RestController (MVC-C)
+│   │   │   │   ├── service/              ← Interfaces + @Service (lógica de negocio)
+│   │   │   │   ├── repository/           ← JpaRepository (DAO)
+│   │   │   │   ├── model/                ← @Entity JPA (MVC-M)
+│   │   │   │   ├── dto/                  ← Request/Response DTOs
+│   │   │   │   ├── security/             ← JWT + Spring Security
+│   │   │   │   └── config/               ← SecurityConfig, OpenApiConfig
+│   │   │   └── resources/
+│   │   │       ├── application-example.yml  ← Plantilla sin secretos ✓
+│   │   │       └── logback-spring.xml       ← Configuración de logs
+│   │   └── test/java/com/clinivet/arias/    ← Tests JUnit 5 + Mockito
 │   └── pom.xml
 │
-├── database/
-│   ├── clinivet_schema.sql    ← DDL completo (tablas, enums, índices)
-│   ├── seed_data.sql          ← Datos de prueba
-│   └── migrations/            ← Cambios incrementales
-│
+├── frontend/                             ← Proyecto Angular (próximo sprint)
+├── database/                             ← DDL SQL, seeds, migrations
+├── .gitignore
 └── README.md
 ```
+
+> **Nota de seguridad:** `application.yml` (con credenciales reales) está en `.gitignore` y nunca se sube al repositorio. Usar `application-example.yml` como plantilla.
 
 ---
 
@@ -183,40 +152,40 @@ clinivet-arias/
 
 ### 5.1 Autenticación
 
-| Método | Endpoint           | Descripción                   |
-| ------ | ------------------ | ----------------------------- |
-| `POST` | `/api/auth/login`  | Login de usuario, retorna JWT |
-| `POST` | `/api/auth/logout` | Invalida sesión               |
+| Método | Endpoint           | Descripción                   | Roles       |
+| ------ | ------------------ | ----------------------------- | ----------- |
+| `POST` | `/api/auth/login`  | Login → retorna JWT + rol     | Público     |
+| `POST` | `/api/auth/logout` | Invalida sesión               | Autenticado |
 
 ### 5.2 Propietarios
 
-| Método | Endpoint                 | Descripción                           |
-| ------ | ------------------------ | ------------------------------------- |
-| `GET`  | `/api/propietarios`      | Listar todos los propietarios activos |
-| `GET`  | `/api/propietarios/{id}` | Obtener propietario por ID            |
-| `POST` | `/api/propietarios`      | Registrar nuevo propietario           |
-| `PUT`  | `/api/propietarios/{id}` | Actualizar datos del propietario      |
+| Método | Endpoint                 | Descripción                           | Roles       |
+| ------ | ------------------------ | ------------------------------------- | ----------- |
+| `GET`  | `/api/propietarios`      | Listar propietarios activos           | ADMIN, RECEPCIONISTA |
+| `GET`  | `/api/propietarios/{id}` | Obtener propietario por ID            | ADMIN, RECEPCIONISTA |
+| `POST` | `/api/propietarios`      | Registrar nuevo propietario           | RECEPCIONISTA |
+| `PUT`  | `/api/propietarios/{id}` | Actualizar datos del propietario      | RECEPCIONISTA |
 
 ### 5.3 Mascotas
 
-| Método | Endpoint                       | Descripción                |
-| ------ | ------------------------------ | -------------------------- |
-| `GET`  | `/api/mascotas`                | Listar mascotas            |
-| `GET`  | `/api/mascotas/{id}`           | Detalle de mascota         |
-| `GET`  | `/api/mascotas/{id}/historial` | Historial clínico completo |
-| `POST` | `/api/mascotas`                | Registrar mascota          |
-| `PUT`  | `/api/mascotas/{id}`           | Actualizar datos           |
+| Método | Endpoint                       | Descripción                | Roles        |
+| ------ | ------------------------------ | -------------------------- | ------------ |
+| `GET`  | `/api/mascotas`                | Listar mascotas            | Autenticado  |
+| `GET`  | `/api/mascotas/{id}`           | Detalle de mascota         | Autenticado  |
+| `GET`  | `/api/mascotas/{id}/historial` | Historial clínico completo | Autenticado  |
+| `POST` | `/api/mascotas`                | Registrar mascota          | RECEPCIONISTA |
+| `PUT`  | `/api/mascotas/{id}`           | Actualizar datos           | RECEPCIONISTA |
 
 ### 5.4 Citas
 
-| Método  | Endpoint                 | Descripción                                |
-| ------- | ------------------------ | ------------------------------------------ |
-| `GET`   | `/api/citas`             | Listar citas (filtros: fecha, estado, vet) |
-| `GET`   | `/api/citas/{id}`        | Detalle de cita                            |
-| `POST`  | `/api/citas`             | Agendar nueva cita                         |
-| `PATCH` | `/api/citas/{id}/estado` | Cambiar estado (atendida / cancelada)      |
+| Método  | Endpoint                 | Descripción                                | Roles       |
+| ------- | ------------------------ | ------------------------------------------ | ----------- |
+| `GET`   | `/api/citas`             | Listar citas (filtros: fecha, estado, vet) | Autenticado |
+| `GET`   | `/api/citas/{id}`        | Detalle de cita                            | Autenticado |
+| `POST`  | `/api/citas`             | Agendar nueva cita                         | RECEPCIONISTA |
+| `PATCH` | `/api/citas/{id}/estado` | Cambiar estado (atendida / cancelada)      | VETERINARIO |
 
-> **RN-03:** No se pueden registrar dos citas para el mismo veterinario en la misma fecha/hora. El backend valida con el índice único `(veterinario_id, fecha_hora)`.
+> **RN-03:** No se pueden registrar dos citas para el mismo veterinario en la misma fecha/hora.
 
 ### 5.5 Consultas
 
@@ -237,20 +206,12 @@ clinivet-arias/
 | `POST` | `/api/inventario/movimientos`  | Registrar entrada o salida de stock             |
 | `GET`  | `/api/inventario/alertas`      | Medicamentos con stock bajo o próximos a vencer |
 
-### 5.7 Vacunas
+### 5.7 Reportes (Apache POI)
 
-| Método | Endpoint                     | Descripción                            |
-| ------ | ---------------------------- | -------------------------------------- |
-| `GET`  | `/api/vacunas/catalogo`      | Listar catálogo de vacunas             |
-| `POST` | `/api/vacunas/aplicadas`     | Registrar vacuna aplicada              |
-| `GET`  | `/api/mascotas/{id}/vacunas` | Historial de vacunación de una mascota |
-
-### 5.8 Notificaciones
-
-| Método  | Endpoint                        | Descripción                                   |
-| ------- | ------------------------------- | --------------------------------------------- |
-| `GET`   | `/api/notificaciones`           | Listar notificaciones del usuario autenticado |
-| `PATCH` | `/api/notificaciones/{id}/leer` | Marcar como leída                             |
+| Método | Endpoint                   | Descripción                          |
+| ------ | -------------------------- | ------------------------------------ |
+| `GET`  | `/api/reportes/citas`      | Exportar reporte de citas en `.xlsx` |
+| `GET`  | `/api/reportes/mascotas`   | Exportar listado de mascotas en `.xlsx` |
 
 ---
 
@@ -259,7 +220,7 @@ clinivet-arias/
 ### 6.1 Prerrequisitos
 
 - Java 21 (JDK)
-- Node.js 20+
+- Maven 3.9+
 - Cuenta en [Supabase](https://supabase.com) (gratuita)
 - Git
 
@@ -267,93 +228,42 @@ clinivet-arias/
 
 1. Crear un nuevo proyecto en Supabase.
 2. Ir a **SQL Editor** dentro del proyecto.
-3. Abrir el archivo `database/clinivet_schema.sql` del repositorio y pegarlo en el editor.
-4. Ejecutar el script. Esto crea las 15 tablas, los enums, los índices y las restricciones.
+3. Abrir el archivo `database/clinivet_schema.sql` y pegarlo en el editor.
+4. Ejecutar el script. Crea las 15 tablas, los enums, los índices y las restricciones.
 5. Ir a **Project Settings → Database** y copiar la **Connection String** (modo `URI`).
 
-```
-postgresql://postgres:[PASSWORD]@db.[REF].supabase.co:5432/postgres
-```
-
-### 6.3 Configurar el backend (Spring Boot)
-
-1. Clonar el repositorio:
+### 6.3 Configurar el backend
 
 ```bash
-git clone https://github.com/[org]/clinivet-arias.git
-cd clinivet-arias/backend
+git clone https://github.com/Edudev2004/clinivet-arias-backend.git
+cd clinivet-arias-backend/backend
 ```
 
-2. Crear el archivo `src/main/resources/application.yml` (no se sube al repo, está en `.gitignore`):
+Copiar la plantilla y completar los valores:
 
-```yaml
-spring:
-  datasource:
-    url: jdbc:postgresql://db.[REF].supabase.co:5432/postgres
-    username: postgres
-    password: [TU_PASSWORD]
-    driver-class-name: org.postgresql.Driver
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    show-sql: false
-
-jwt:
-  secret: [CLAVE_SECRETA_MINIMO_256_BITS]
-  expiration-ms: 86400000
-
-server:
-  port: 8080
+```bash
+cp src/main/resources/application-example.yml src/main/resources/application.yml
+# Editar application.yml con tus credenciales reales
 ```
 
-3. Ejecutar el backend:
+Ejecutar:
 
 ```bash
 ./mvnw spring-boot:run
+# o en Windows:
+mvnw.cmd spring-boot:run
 ```
 
-4. Verificar que el servidor esté corriendo: `http://localhost:8080/api/auth/login`
+Verificar: `http://localhost:8080/swagger-ui/index.html`
 
-### 6.4 Configurar el frontend (Angular)
-
-1. Instalar dependencias:
+### 6.4 Ejecutar los tests
 
 ```bash
-cd ../frontend
-npm install
+cd backend
+./mvnw test
 ```
 
-2. Configurar la URL de la API en `src/environments/environment.development.ts`:
-
-```typescript
-export const environment = {
-  production: false,
-  apiUrl: 'http://localhost:8080/api'
-};
-```
-
-3. Ejecutar en desarrollo:
-
-```bash
-ng serve
-# o alternativamente: npm start
-```
-
-La aplicación estará disponible en `http://localhost:4200`.
-
-### 6.5 Datos de prueba
-
-Para cargar datos iniciales de prueba (roles, especialidades, un usuario administrador):
-
-```bash
-# En el SQL Editor de Supabase, ejecutar:
-database/seed_data.sql
-```
-
-Usuario de prueba:
-
-- **Email:** `admin@clinivet.pe`
-- **Password:** `Admin123!`
+Los tests usan H2 (base de datos en memoria), no necesitan conexión a Supabase.
 
 ---
 
@@ -361,148 +271,66 @@ Usuario de prueba:
 
 ### 7.1 Estructura de ramas
 
-| Rama                              | Propósito                                                                                      |
-| --------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `main`                            | Código en producción. Solo recibe merges desde `release/` o `hotfix/`. Nunca commits directos. |
-| `develop`                         | Rama de integración. Todas las feature branches terminan aquí.                                 |
-| `feature/US-XX-descripcion-corta` | Una rama por historia de usuario. Nace de `develop`.                                           |
-| `release/sprint-N`                | Se abre al cerrar cada sprint para estabilizar antes de pasar a `main`.                        |
-| `hotfix/descripcion`              | Solo para bugs urgentes en producción, sale de `main`.                                         |
+| Rama                              | Propósito                                                                    |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| `main`                            | Código en producción. Solo recibe merges desde `release/` o `hotfix/`.       |
+| `develop`                         | Rama de integración. Todas las feature branches terminan aquí.               |
+| `feature/RF-XX-descripcion-corta` | Una rama por requerimiento funcional. Nace de `develop`.                     |
+| `release/sprint-N`                | Se abre al cerrar cada sprint para estabilizar antes de pasar a `main`.      |
+| `hotfix/descripcion`              | Solo para bugs urgentes en producción, sale de `main`.                       |
 
 > **Importante:** Al mergear una feature, **NO borrar la rama**. Sirve de evidencia del trabajo realizado.
 
-### 7.2 Diagrama del flujo
-
-```
-main       ──────────────────────────────────────●─────────────────●──
-                                                ↑                 ↑
-release    ───────────────────────────────── sprint-1 ──     sprint-2
-                                               ↑                ↑
-develop    ──●───────────────────────────────●──────────────────●────
-             ↑     ↑           ↑           ↑
-feature       US-01  US-03      US-07       US-14
-```
-
-### 7.3 Flujo diario paso a paso
-
-**Antes de empezar una historia de usuario:**
+### 7.2 Flujo diario
 
 ```bash
+# Antes de empezar un requerimiento
 git checkout develop
 git pull origin develop
-```
+git checkout -b feature/RF-01-endpoint-login
 
-**Crear la rama de la historia:**
-
-```bash
-git checkout -b feature/US-14-agendar-cita
-```
-
-**Trabajar y commitear con mensajes descriptivos en español:**
-
-```bash
+# Trabajar y commitear en español sin prefijos
 git add .
-git commit -m "Agregar validación de disponibilidad del veterinario en agendamiento"
-git commit -m "Implementar endpoint POST /api/citas con respuesta 201"
-git commit -m "Agregar manejo de error 409 cuando existe conflicto de horario"
-```
+git commit -m "Agregar test de login correcto con JWT"
+git commit -m "Implementar endpoint POST /api/auth/login"
 
-> Los mensajes deben ser atómicos y en español. Sin prefijos como `feat:`, `fix:` o `chore:`.
-
-**Subir la rama y abrir Pull Request:**
-
-```bash
-git push origin feature/US-14-agendar-cita
-```
-
-Luego en GitHub: **New Pull Request → base: `develop` ← compare: `feature/US-14-agendar-cita`**
-
-El PR debe describir:
-
-- Qué historia de usuario resuelve
-- Qué cambios incluye
-- Cómo probar
-
-**Revisión:** Al menos 1 compañero revisa y aprueba antes de mergear.
-
-**Al cerrar un sprint:**
-
-```bash
-git checkout develop
-git pull origin develop
-git checkout -b release/sprint-1
-# Pruebas finales, correcciones menores
-git checkout main
-git merge release/sprint-1
-git tag v1.0-sprint-1
-git push origin main --tags
-```
-
-### 7.4 Convención de nombres de ramas
-
-```
-feature/US-01-registro-propietario
-feature/US-03-registro-mascota
-feature/US-07-historial-vacunacion
-feature/US-14-agendar-cita
-feature/US-22-control-inventario
-release/sprint-1
-release/sprint-2
-hotfix/error-login-produccion
+# Subir la rama y abrir Pull Request hacia develop
+git push origin feature/RF-01-endpoint-login
 ```
 
 ---
 
 ## 8. Gestión de tareas con GitHub Projects
 
-### 8.1 Tablero Kanban
+Tablero Kanban con columnas: **Backlog → Sprint actual → En progreso → En revisión → Completado**
 
-El proyecto usa **GitHub Projects** en modo Kanban con las siguientes columnas:
-
-| Columna           | Descripción                                      |
-| ----------------- | ------------------------------------------------ |
-| **Backlog**       | Historias de usuario pendientes de planificación |
-| **Sprint actual** | Issues asignados al sprint en curso              |
-| **En progreso**   | Issue con rama activa y desarrollador asignado   |
-| **En revisión**   | Pull Request abierto, esperando aprobación       |
-| **Completado**    | PR mergeado a `develop`, issue cerrado           |
-
-### 8.2 Estructura de un Issue
-
-Cada historia de usuario se crea como un **Issue** en GitHub con el siguiente formato:
+Cada Issue sigue el formato:
 
 ```
-Título: [US-14] Agendar cita con veterinario
-
-Como propietario,
-quiero agendar una cita para mi mascota con un veterinario disponible,
-para que sea atendida en el horario que me convenga.
+Título: [RF-01] Endpoint POST /api/auth/login
+Como usuario del sistema,
+quiero autenticarme con usuario y contraseña,
+para obtener un token JWT y acceder a las funciones del sistema.
 
 Criterios de aceptación:
-- [ ] El sistema muestra los veterinarios disponibles por fecha
-- [ ] No permite agendar si el vet ya tiene cita en ese horario (RN-03)
-- [ ] Genera notificación interna al crear la cita
-- [ ] Retorna error 409 si hay conflicto de horario
-
-Labels: enhancement · sprint-1 · backend · frontend
-Assignees: @US-14-responsable
-```
-
-### 8.3 Relación Issue → Rama → PR
-
-```
-Issue #14 "Agendar cita"
-    └── Rama: feature/US-14-agendar-cita
-            └── Pull Request: "US-14: Implementar agendamiento de citas"
-                    └── Merge a develop → Issue #14 se cierra automáticamente
-```
-
-Para que el issue se cierre automáticamente al mergear, incluir en la descripción del PR:
-
-```
-Closes #14
+- [ ] Retorna JWT válido si las credenciales son correctas
+- [ ] Retorna HTTP 401 con mensaje claro si la contraseña es incorrecta
+- [ ] Retorna HTTP 401 con mensaje claro si el usuario no existe
+- [ ] El log registra el intento fallido SIN la contraseña
 ```
 
 ---
 
-_Documentación generada para el Avance de Proyecto Final 2 — Grupo 5 · DWI · UTP_
+## 9. Equivalencias framework vs. conceptos del curso
+
+| Concepto del curso | Equivalente en Spring Boot | Justificación |
+| ------------------ | -------------------------- | ------------- |
+| **MVC** | `@RestController` (C) + `@Entity`/DTO (M) + Angular SPA (V desacoplada) | El patrón MVC se mantiene; la Vista es la SPA Angular que consume la API REST. |
+| **DAO** | `@Repository` extendiendo `JpaRepository<T,ID>` | Spring Data JPA es la evolución estándar del patrón DAO. Abstrae completamente el acceso a datos. |
+| **TDD** | JUnit 5 + Mockito + `@WebMvcTest` / `@SpringBootTest` | Tests escritos antes del código de producción (ciclo Red-Green-Refactor). |
+| **Seguridad** | BCrypt + JWT + `@PreAuthorize` + Spring Security 6 | Autenticación stateless, roles granulares, logs sin datos sensibles. |
+| **Librerías Java** | Guava, Commons Lang3, Apache POI, Logback | Integradas en la capa de servicio, reportes y configuración de logs. |
+
+---
+
+*Documentación del Avance de Proyecto Final — Grupo 5 · Desarrollo de Software · UTP*
