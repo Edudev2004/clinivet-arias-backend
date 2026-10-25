@@ -11,10 +11,15 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Controlador REST para operaciones de autenticación y sesión.
@@ -22,7 +27,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping({"/api/auth", "/auth"})
-@Tag(name = "Autenticación", description = "Endpoints para inicio de sesión y gestión de credenciales JWT")
+@Tag(name = "Autenticación", description = "Endpoints para inicio de sesión, perfil y gestión de credenciales JWT")
 public class AuthController {
 
     private final IAuthService authService;
@@ -47,6 +52,29 @@ public class AuthController {
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse response = authService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "Consultar perfil y rol actual", description = "Retorna los datos y roles del usuario autenticado (RF-03)")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Usuario autenticado con éxito"),
+            @ApiResponse(responseCode = "401", description = "No autenticado o token expirado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<Map<String, Object>> getPerfilActual(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        List<String> roles = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(Map.of(
+                "email", authentication.getName(),
+                "roles", roles,
+                "autenticado", true
+        ));
     }
 
     @PostMapping("/logout")

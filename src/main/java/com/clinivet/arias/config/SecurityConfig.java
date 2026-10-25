@@ -1,5 +1,7 @@
 package com.clinivet.arias.config;
 
+import com.clinivet.arias.security.CustomAccessDeniedHandler;
+import com.clinivet.arias.security.CustomAuthenticationEntryPoint;
 import com.clinivet.arias.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,18 +25,24 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Configuración central de seguridad con Spring Security 6.
- * Define la cadena de filtros, política stateless, CORS y encoder BCrypt.
+ * Configuración central de seguridad con Spring Security 6 y RBAC (Control de acceso por roles).
+ * Cumple con RF-01, RF-02, RF-03 y RNF-01 a RNF-04 según APF2.
  */
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final CustomAuthenticationEntryPoint authEntryPoint;
+    private final CustomAccessDeniedHandler accessDeniedHandler;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter,
+                          CustomAuthenticationEntryPoint authEntryPoint,
+                          CustomAccessDeniedHandler accessDeniedHandler) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.authEntryPoint = authEntryPoint;
+        this.accessDeniedHandler = accessDeniedHandler;
     }
 
     @Bean
@@ -43,8 +51,12 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
+                )
                 .authorizeHttpRequests(auth -> auth
-                        // Endpoints públicos
+                        // Endpoints públicos de autenticación y documentación
                         .requestMatchers(
                                 "/api/auth/login",
                                 "/api/auth/logout",
@@ -55,7 +67,23 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/api-docs/**"
                         ).permitAll()
-                        // Cualquier otra petición requiere autenticación
+
+                        // Endpoints exclusivos de Administración (RF-03, APF2 Tabla 40)
+                        .requestMatchers("/api/admin/**").hasRole("ADMINISTRADOR")
+
+                        // Endpoints clínicos y de atención médica (Veterinarios y Administrador)
+                        .requestMatchers("/api/consultas/**", "/api/tratamientos/**")
+                        .hasAnyRole("ADMINISTRADOR", "VETERINARIO")
+
+                        // Endpoints de Inventario y Kardex (Encargado de Inventario y Administrador)
+                        .requestMatchers("/api/inventario/**")
+                        .hasAnyRole("ADMINISTRADOR", "ENCARGADO_INVENTARIO")
+
+                        // Endpoints de Citas, Propietarios y Mascotas (Admin, Recepción y Veterinario)
+                        .requestMatchers("/api/citas/**", "/api/propietarios/**", "/api/mascotas/**")
+                        .hasAnyRole("ADMINISTRADOR", "RECEPCIONISTA", "VETERINARIO")
+
+                        // Cualquier otra petición requiere token válido
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
@@ -76,7 +104,6 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Permite frontend local de Angular y despliegues en Vercel
         configuration.setAllowedOriginPatterns(List.of(
                 "http://localhost:4200",
                 "http://localhost:3000",
