@@ -447,4 +447,67 @@ class CitaServiceTest {
 
         assertThrows(ResourceNotFoundException.class, () -> citaService.reprogramarCita(citaId, request));
     }
+
+    @Test
+    @DisplayName("RF-17 / RN-07: Cancelación exitosa actualiza el estado a CANCELADA y conserva el registro en BD (soft cancel)")
+    void cancelarCita_CitaProgramada_ActualizaEstadoACanceladaYConservaRegistro() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().plusDays(2).withHour(10).withMinute(0);
+        Cita citaProgramada = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.PROGRAMADA, "Chequeo", adminId);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaProgramada));
+        when(citaRepository.save(any(Cita.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        CitaResponse response = citaService.cancelarCita(citaId);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(citaId, response.getId());
+        assertEquals("CANCELADA", response.getEstado());
+        assertEquals(EstadoCita.CANCELADA, citaProgramada.getEstado());
+        verify(citaRepository, times(1)).save(citaProgramada);
+        verify(citaRepository, never()).delete(any());
+        verify(citaRepository, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("RF-17: Cancelar una cita que ya se encuentra CANCELADA lanza IllegalStateException (400)")
+    void cancelarCita_CitaYaCancelada_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().plusDays(2).withHour(10).withMinute(0);
+        Cita citaCancelada = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.CANCELADA, "Chequeo", adminId);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaCancelada));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> citaService.cancelarCita(citaId));
+        assertTrue(ex.getMessage().contains("ya se encuentra cancelada"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-17: Cancelar una cita que ya fue ATENDIDA lanza IllegalStateException (400)")
+    void cancelarCita_CitaAtendida_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().minusDays(1).withHour(10).withMinute(0);
+        Cita citaAtendida = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.ATENDIDA, "Chequeo", adminId);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaAtendida));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> citaService.cancelarCita(citaId));
+        assertTrue(ex.getMessage().contains("ya fue atendida"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-17: Cancelar cita inexistente lanza ResourceNotFoundException (404)")
+    void cancelarCita_CitaInexistente_LanzaResourceNotFoundException() {
+        when(citaRepository.findById(citaId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> citaService.cancelarCita(citaId));
+    }
 }
