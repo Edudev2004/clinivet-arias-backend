@@ -306,6 +306,52 @@ public class CitaServiceImpl implements ICitaService {
         });
     }
 
+    @Override
+    @Transactional
+    public CitaResponse actualizarEstadoCita(UUID id, com.clinivet.arias.dto.CitaEstadoRequest request) {
+        Preconditions.checkNotNull(id, "El ID de la cita no puede ser nulo");
+        Preconditions.checkNotNull(request, "La solicitud de actualización de estado no puede ser nula");
+        Preconditions.checkNotNull(request.getEstado(), "El estado de la cita es requerido");
+
+        Cita cita = citaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cita médica no encontrada con ID: " + id));
+
+        // 1. Validar que la cita actual no se encuentre ya en ATENDIDA o CANCELADA
+        if (cita.getEstado() == EstadoCita.ATENDIDA || cita.getEstado() == EstadoCita.CANCELADA) {
+            log.warn("Rechazo de actualización de estado: la cita [{}] ya se encuentra [{}] y no admite más transiciones",
+                    id, cita.getEstado());
+            throw new IllegalStateException("No se puede cambiar el estado de una cita que ya fue atendida o cancelada");
+        }
+
+        // 2. Parsear y validar el nuevo estado solicitado
+        EstadoCita nuevoEstado = EstadoCita.fromCodigo(request.getEstado().trim());
+
+        // 3. Validar transiciones permitidas (solo desde PROGRAMADA hacia ATENDIDA o CANCELADA)
+        if (cita.getEstado() == EstadoCita.PROGRAMADA) {
+            if (nuevoEstado != EstadoCita.ATENDIDA && nuevoEstado != EstadoCita.CANCELADA) {
+                log.warn("Transición no permitida para la cita [{}]: intento de cambio hacia [{}]", id, nuevoEstado);
+                throw new IllegalStateException("Transición de estado no permitida. Solo se permite: PROGRAMADA → ATENDIDA o PROGRAMADA → CANCELADA");
+            }
+        }
+
+        cita.setEstado(nuevoEstado);
+        Cita citaGuardada = citaRepository.save(cita);
+
+        log.info("Estado de la cita médica [{}] actualizado exitosamente a [{}] (RF-19)", id, nuevoEstado);
+
+        Mascota mascota = null;
+        if (citaGuardada.getMascotaId() != null) {
+            mascota = mascotaRepository.findById(citaGuardada.getMascotaId()).orElse(null);
+        }
+        String creadoPorEmail = null;
+        if (citaGuardada.getCreadoPor() != null) {
+            creadoPorEmail = usuarioRepository.findById(citaGuardada.getCreadoPor())
+                    .map(Usuario::getEmail)
+                    .orElse(null);
+        }
+        return mapearACitaResponse(citaGuardada, mascota, creadoPorEmail);
+    }
+
     private CitaResponse mapearACitaResponse(Cita cita, Mascota masc, String creadoPorEmail) {
         Propietario prop = masc != null ? masc.getPropietario() : null;
         Veterinario vet = cita.getVeterinario();

@@ -410,4 +410,73 @@ class CitaControllerTest {
                 .andExpect(jsonPath("$.content[0].veterinarioId").value(vetId.toString()))
                 .andExpect(jsonPath("$.content[0].estado").value("PROGRAMADA"));
     }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/estado con transición válida retorna 200 OK con cita actualizada (RF-19)")
+    void actualizarEstadoCita_PeticionValida_Retorna200Ok() throws Exception {
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("ATENDIDA");
+        LocalDate fecha = LocalDate.now().plusDays(2);
+        LocalTime hora = LocalTime.of(10, 30);
+        LocalDateTime fechaHora = LocalDateTime.of(fecha, hora);
+
+        CitaResponse response = new CitaResponse(
+                citaId, mascId, "Bobby", "Canino", propId, "Carlos Mendoza", "45892314", "987123456",
+                vetId, "Beckhan Elias", "Medicina General", fecha, hora, fechaHora, "ATENDIDA",
+                "Motivo", adminId, "admin@clinivet.pe", LocalDateTime.now()
+        );
+
+        when(citaService.actualizarEstadoCita(eq(citaId), any(com.clinivet.arias.dto.CitaEstadoRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/estado", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()))
+                .andExpect(jsonPath("$.estado").value("ATENDIDA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /citas/{id}/estado alias de ruta retorna 200 OK (RF-19)")
+    void actualizarEstadoCita_RutaAlias_Retorna200Ok() throws Exception {
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("ATENDIDA");
+        CitaResponse response = buildSampleResponse();
+
+        when(citaService.actualizarEstadoCita(eq(citaId), any(com.clinivet.arias.dto.CitaEstadoRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/citas/{id}/estado", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/estado con transición no permitida retorna 400 Bad Request (RF-19)")
+    void actualizarEstadoCita_TransicionInvalida_Retorna400BadRequest() throws Exception {
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("PROGRAMADA");
+
+        when(citaService.actualizarEstadoCita(eq(citaId), any(com.clinivet.arias.dto.CitaEstadoRequest.class)))
+                .thenThrow(new IllegalStateException("Transición de estado no permitida. Solo se permite: PROGRAMADA → ATENDIDA o PROGRAMADA → CANCELADA"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/estado", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensaje").value("Transición de estado no permitida. Solo se permite: PROGRAMADA → ATENDIDA o PROGRAMADA → CANCELADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/estado con campo estado en blanco retorna 400 Bad Request (RF-19)")
+    void actualizarEstadoCita_EstadoEnBlanco_Retorna400BadRequest() throws Exception {
+        com.clinivet.arias.dto.CitaEstadoRequest requestInvalido = new com.clinivet.arias.dto.CitaEstadoRequest("");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/estado", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestInvalido)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
 }

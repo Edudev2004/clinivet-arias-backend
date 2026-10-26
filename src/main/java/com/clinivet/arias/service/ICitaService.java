@@ -65,4 +65,14 @@ public interface ICitaService {
             String estado,
             org.springframework.data.domain.Pageable pageable
     );
+
+    /**
+     * Actualiza el estado de una cita médica validando las transiciones de ciclo de vida permitidas (RF-19).
+     * Solo permite transiciones: PROGRAMADA → ATENDIDA, PROGRAMADA → CANCELADA.
+     *
+     * @param id identificador UUID de la cita
+     * @param request solicitud con el nuevo estado
+     * @return detalle actualizado de la cita médica
+     */
+    CitaResponse actualizarEstadoCita(UUID id, com.clinivet.arias.dto.CitaEstadoRequest request);
 }
