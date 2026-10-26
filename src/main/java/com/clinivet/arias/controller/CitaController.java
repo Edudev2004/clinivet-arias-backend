@@ -66,4 +66,23 @@ public class CitaController {
         CitaResponse response = citaService.obtenerCitaPorId(id);
         return ResponseEntity.ok(response);
     }
+
+    @PatchMapping("/{id}/reprogramar")
+    @Operation(summary = "Reprogramar cita médica a nueva fecha y hora",
+            description = "Actualiza la fecha y hora de una cita en estado PROGRAMADA validando la disponibilidad de agenda del veterinario (RF-16).")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Cita médica reprogramada exitosamente",
+                    content = @Content(schema = @Schema(implementation = CitaResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Estado no válido para reprogramar o fecha pasada",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Cita no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Conflicto de horario con otra cita programada para el veterinario",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<CitaResponse> reprogramarCita(@PathVariable("id") UUID id,
+                                                        @Valid @RequestBody com.clinivet.arias.dto.CitaReprogramarRequest request) {
+        CitaResponse response = citaService.reprogramarCita(id, request);
+        return ResponseEntity.ok(response);
+    }
 }

@@ -220,4 +220,75 @@ class CitaControllerTest {
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.mensaje").value("El veterinario ya tiene una cita registrada en esa fecha y hora"));
     }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/reprogramar retorna 200 OK con cita reprogramada (RF-16)")
+    void reprogramarCita_PeticionValida_Retorna200Ok() throws Exception {
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+        CitaResponse response = buildSampleResponse();
+
+        when(citaService.reprogramarCita(eq(citaId), any(com.clinivet.arias.dto.CitaReprogramarRequest.class))).thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/reprogramar", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()))
+                .andExpect(jsonPath("$.estado").value("PROGRAMADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /citas/{id}/reprogramar alias de ruta retorna 200 OK (RF-16)")
+    void reprogramarCita_RutaAlias_Retorna200Ok() throws Exception {
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+        CitaResponse response = buildSampleResponse();
+
+        when(citaService.reprogramarCita(eq(citaId), any(com.clinivet.arias.dto.CitaReprogramarRequest.class))).thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/citas/{id}/reprogramar", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/reprogramar con conflicto horario retorna 409 Conflict (RF-16)")
+    void reprogramarCita_ConflictoHorario_Retorna409Conflict() throws Exception {
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaService.reprogramarCita(eq(citaId), any(com.clinivet.arias.dto.CitaReprogramarRequest.class)))
+                .thenThrow(new HorarioOcupadoException("El veterinario ya tiene una cita registrada en esa fecha y hora"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/reprogramar", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.mensaje").value("El veterinario ya tiene una cita registrada en esa fecha y hora"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/reprogramar en estado no válido retorna 400 Bad Request (RF-16)")
+    void reprogramarCita_EstadoInvalido_Retorna400BadRequest() throws Exception {
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaService.reprogramarCita(eq(citaId), any(com.clinivet.arias.dto.CitaReprogramarRequest.class)))
+                .thenThrow(new IllegalStateException("Solo se pueden reprogramar citas con estado PROGRAMADA"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/reprogramar", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensaje").value("Solo se pueden reprogramar citas con estado PROGRAMADA"));
+    }
 }

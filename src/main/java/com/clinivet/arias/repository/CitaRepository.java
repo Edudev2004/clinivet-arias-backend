@@ -34,6 +34,11 @@ public interface CitaRepository extends JpaRepository<Cita, UUID> {
     boolean existsByVeterinarioIdAndFechaHoraAndEstado(UUID veterinarioId, LocalDateTime fechaHora, EstadoCita estado);
 
     /**
+     * Verifica si el veterinario ya tiene otra cita registrada en esa fecha y hora distinta a la cita dada (RF-16).
+     */
+    boolean existsByVeterinarioIdAndFechaHoraAndEstadoAndIdNot(UUID veterinarioId, LocalDateTime fechaHora, EstadoCita estado, UUID id);
+
+    /**
      * Retorna todas las citas activas de un veterinario dentro de una fecha específica.
      */
     List<Cita> findByVeterinarioIdAndFechaHoraBetweenAndEstado(
