@@ -21,7 +21,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -116,5 +116,7 @@ class AuthControllerTest {
                         .header("Authorization", "Bearer token.jwt.valido"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.mensaje").value("Sesión cerrada correctamente"));
+
+        verify(authService, times(1)).logout("Bearer token.jwt.valido");
     }
 }
