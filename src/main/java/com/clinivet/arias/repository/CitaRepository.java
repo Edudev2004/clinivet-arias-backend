@@ -3,6 +3,7 @@ package com.clinivet.arias.repository;
 import com.clinivet.arias.model.Cita;
 import com.clinivet.arias.model.EstadoCita;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -13,10 +14,10 @@ import java.util.UUID;
 
 /**
  * Repositorio de acceso a datos para la entidad {@link Cita}.
- * Permite validar cruces de horarios y consultar agendas (RN-03 / RF-13 / RF-14 / RF-15).
+ * Permite validar cruces de horarios, consultar agendas y filtrar citas (RN-03 / RF-13 / RF-14 / RF-15 / RF-18).
  */
 @Repository
-public interface CitaRepository extends JpaRepository<Cita, UUID> {
+public interface CitaRepository extends JpaRepository<Cita, UUID>, JpaSpecificationExecutor<Cita> {
 
     List<Cita> findByMascotaId(UUID mascotaId);
 

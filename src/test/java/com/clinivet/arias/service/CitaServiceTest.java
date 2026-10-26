@@ -15,10 +15,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -469,7 +476,7 @@ class CitaServiceTest {
         assertEquals("CANCELADA", response.getEstado());
         assertEquals(EstadoCita.CANCELADA, citaProgramada.getEstado());
         verify(citaRepository, times(1)).save(citaProgramada);
-        verify(citaRepository, never()).delete(any());
+        verify(citaRepository, never()).delete(any(Cita.class));
         verify(citaRepository, never()).deleteById(any());
     }
 
@@ -509,5 +516,111 @@ class CitaServiceTest {
         when(citaRepository.findById(citaId)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> citaService.cancelarCita(citaId));
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas sin filtros retorna lista paginada ordenada ascendentemente por fechaHora")
+    void listarCitasConFiltros_SinFiltros_RetornaPaginaCitasOrdenadas() {
+        // Arrange
+        LocalDateTime fecha1 = LocalDateTime.now().plusDays(1).withHour(9).withMinute(0);
+        LocalDateTime fecha2 = LocalDateTime.now().plusDays(1).withHour(11).withMinute(0);
+        Cita c1 = new Cita(UUID.randomUUID(), mascId, veterinarioMock, fecha1, EstadoCita.PROGRAMADA, "Control 1", adminId);
+        Cita c2 = new Cita(UUID.randomUUID(), mascId, veterinarioMock, fecha2, EstadoCita.PROGRAMADA, "Control 2", adminId);
+
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Cita> mockPage = new PageImpl<>(List.of(c1, c2), pageable, 2);
+
+        when(citaRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        Page<CitaResponse> resultado = citaService.listarCitasConFiltros(null, null, null, null, null, pageable);
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(2, resultado.getTotalElements());
+        assertEquals(2, resultado.getContent().size());
+        assertEquals("Control 1", resultado.getContent().get(0).getMotivo());
+        assertEquals("Control 2", resultado.getContent().get(1).getMotivo());
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas filtrando por veterinarioId")
+    void listarCitasConFiltros_FiltroPorVeterinario_RetornaCitasDelVeterinario() {
+        // Arrange
+        LocalDateTime fecha = LocalDateTime.now().plusDays(2).withHour(10).withMinute(0);
+        Cita c = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Vacunación", adminId);
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Cita> mockPage = new PageImpl<>(List.of(c), pageable, 1);
+
+        when(citaRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        Page<CitaResponse> resultado = citaService.listarCitasConFiltros(vetId, null, null, null, null, pageable);
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals(vetId, resultado.getContent().get(0).getVeterinarioId());
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas filtrando por estado PROGRAMADA")
+    void listarCitasConFiltros_FiltroPorEstado_RetornaCitasConEstadoEspecifico() {
+        // Arrange
+        LocalDateTime fecha = LocalDateTime.now().plusDays(2).withHour(10).withMinute(0);
+        Cita c = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Vacunación", adminId);
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Cita> mockPage = new PageImpl<>(List.of(c), pageable, 1);
+
+        when(citaRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        Page<CitaResponse> resultado = citaService.listarCitasConFiltros(null, null, null, null, "PROGRAMADA", pageable);
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals("PROGRAMADA", resultado.getContent().get(0).getEstado());
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas combinando filtros de veterinario, rango de fechas y estado")
+    void listarCitasConFiltros_FiltrosCombinados_RetornaCitasFiltradas() {
+        // Arrange
+        LocalDate fechaInicio = LocalDate.now().plusDays(1);
+        LocalDate fechaFin = LocalDate.now().plusDays(7);
+        LocalDateTime fecha = LocalDateTime.now().plusDays(3).withHour(14).withMinute(0);
+        Cita c = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Cirugía", adminId);
+
+        Pageable pageable = PageRequest.of(0, 5);
+        Page<Cita> mockPage = new PageImpl<>(List.of(c), pageable, 1);
+
+        when(citaRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        Page<CitaResponse> resultado = citaService.listarCitasConFiltros(vetId, null, fechaInicio, fechaFin, "PROGRAMADA", pageable);
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals("Cirugía", resultado.getContent().get(0).getMotivo());
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas con estado inválido lanza IllegalArgumentException (400)")
+    void listarCitasConFiltros_EstadoInvalido_LanzaIllegalArgumentException() {
+        Pageable pageable = PageRequest.of(0, 10);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                citaService.listarCitasConFiltros(null, null, null, null, "NO_VALIDO", pageable));
+        assertTrue(ex.getMessage().contains("Estado de cita no válido"));
     }
 }

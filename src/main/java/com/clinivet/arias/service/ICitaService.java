@@ -44,4 +44,25 @@ public interface ICitaService {
      * @return detalle actualizado de la cita médica con estado CANCELADA
      */
     CitaResponse cancelarCita(UUID id);
+
+    /**
+     * Consulta una lista paginada de citas médicas aplicando filtros opcionales por veterinario, fechas y estado (RF-18).
+     * Siempre retorna los resultados ordenados por fecha y hora ascendente.
+     *
+     * @param veterinarioId identificador opcional del veterinario
+     * @param fecha fecha exacta opcional
+     * @param fechaInicio fecha inicial opcional para rango
+     * @param fechaFin fecha final opcional para rango
+     * @param estado estado opcional de la cita
+     * @param pageable configuración de paginación
+     * @return página con citas médicas encontradas
+     */
+    org.springframework.data.domain.Page<CitaResponse> listarCitasConFiltros(
+            UUID veterinarioId,
+            java.time.LocalDate fecha,
+            java.time.LocalDate fechaInicio,
+            java.time.LocalDate fechaFin,
+            String estado,
+            org.springframework.data.domain.Pageable pageable
+    );
 }
