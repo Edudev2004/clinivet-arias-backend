@@ -27,4 +27,13 @@ public interface ICitaService {
      * @return detalle de la cita médica
      */
     CitaResponse obtenerCitaPorId(UUID id);
+
+    /**
+     * Reprograma una cita médica existente a una nueva fecha y hora (RF-16).
+     *
+     * @param id identificador UUID de la cita
+     * @param request datos con la nueva fecha y hora
+     * @return detalle actualizado de la cita médica
+     */
+    CitaResponse reprogramarCita(UUID id, com.clinivet.arias.dto.CitaReprogramarRequest request);
 }

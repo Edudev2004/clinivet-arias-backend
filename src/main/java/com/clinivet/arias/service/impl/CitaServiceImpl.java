@@ -159,6 +159,61 @@ public class CitaServiceImpl implements ICitaService {
         return mapearACitaResponse(cita, mascota, creadoPorEmail);
     }
 
+    @Override
+    @Transactional
+    public CitaResponse reprogramarCita(UUID id, com.clinivet.arias.dto.CitaReprogramarRequest request) {
+        Preconditions.checkNotNull(id, "El ID de la cita no puede ser nulo");
+        Preconditions.checkNotNull(request, "La solicitud de reprogramación no puede ser nula");
+        Preconditions.checkNotNull(request.getNuevaFecha(), "La nueva fecha es requerida");
+        Preconditions.checkNotNull(request.getNuevaHora(), "La nueva hora es requerida");
+
+        Cita cita = citaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cita médica no encontrada con ID: " + id));
+
+        if (cita.getEstado() != EstadoCita.PROGRAMADA) {
+            log.warn("Rechazo de reprogramación: la cita [{}] se encuentra en estado [{}] y solo se pueden reprogramar citas PROGRAMADAS",
+                    id, cita.getEstado());
+            throw new IllegalStateException("Solo se pueden reprogramar citas con estado PROGRAMADA");
+        }
+
+        LocalDateTime nuevaFechaHora = LocalDateTime.of(request.getNuevaFecha(), request.getNuevaHora());
+        if (nuevaFechaHora.isBefore(LocalDateTime.now())) {
+            log.warn("Rechazo de reprogramación: la nueva fecha/hora [{}] se encuentra en el pasado", nuevaFechaHora);
+            throw new IllegalArgumentException("No se puede reprogramar una cita a una fecha u hora pasada");
+        }
+
+        // Validar cruce de horario para el veterinario en la nueva fecha y hora excluyendo la cita actual
+        boolean horarioOcupado = citaRepository.existsByVeterinarioIdAndFechaHoraAndEstadoAndIdNot(
+                cita.getVeterinario().getId(),
+                nuevaFechaHora,
+                EstadoCita.PROGRAMADA,
+                cita.getId()
+        );
+
+        if (horarioOcupado) {
+            log.warn("Conflicto al reprogramar cita [{}]: el veterinario [{}] ya cuenta con una cita PROGRAMADA en [{}]",
+                    id, cita.getVeterinario().getId(), nuevaFechaHora);
+            throw new HorarioOcupadoException("El veterinario ya tiene una cita registrada en esa fecha y hora");
+        }
+
+        cita.setFechaHora(nuevaFechaHora);
+        Cita citaGuardada = citaRepository.save(cita);
+
+        log.info("Cita médica [{}] reprogramada exitosamente a la nueva fecha y hora [{}]", id, nuevaFechaHora);
+
+        Mascota mascota = null;
+        if (citaGuardada.getMascotaId() != null) {
+            mascota = mascotaRepository.findById(citaGuardada.getMascotaId()).orElse(null);
+        }
+        String creadoPorEmail = null;
+        if (citaGuardada.getCreadoPor() != null) {
+            creadoPorEmail = usuarioRepository.findById(citaGuardada.getCreadoPor())
+                    .map(Usuario::getEmail)
+                    .orElse(null);
+        }
+        return mapearACitaResponse(citaGuardada, mascota, creadoPorEmail);
+    }
+
     private CitaResponse mapearACitaResponse(Cita cita, Mascota masc, String creadoPorEmail) {
         Propietario prop = masc != null ? masc.getPropietario() : null;
         Veterinario vet = cita.getVeterinario();

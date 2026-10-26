@@ -322,4 +322,129 @@ class CitaServiceTest {
         assertEquals("PROGRAMADA", response.getEstado());
         verify(citaRepository, times(1)).save(any(Cita.class));
     }
+
+    @Test
+    @DisplayName("RF-16: Reprogramación exitosa actualiza fecha y hora cuando el estado es PROGRAMADA y hay disponibilidad")
+    void reprogramarCita_DatosValidos_ActualizaFechaHoraYRetornaDetalle() {
+        // Arrange
+        LocalDateTime fechaHoraOriginal = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaExistente = new Cita(citaId, mascId, veterinarioMock, fechaHoraOriginal, EstadoCita.PROGRAMADA, "Control", adminId);
+
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        LocalDateTime nuevaFechaHora = LocalDateTime.of(nuevaFecha, nuevaHora);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaExistente));
+        when(citaRepository.existsByVeterinarioIdAndFechaHoraAndEstadoAndIdNot(vetId, nuevaFechaHora, EstadoCita.PROGRAMADA, citaId))
+                .thenReturn(false);
+        when(citaRepository.save(any(Cita.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        CitaResponse response = citaService.reprogramarCita(citaId, request);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(citaId, response.getId());
+        assertEquals(nuevaFecha, response.getFecha());
+        assertEquals(nuevaHora, response.getHora());
+        assertEquals("PROGRAMADA", response.getEstado());
+        verify(citaRepository).save(citaExistente);
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramación con conflicto de horario del veterinario lanza HorarioOcupadoException (409)")
+    void reprogramarCita_ConflictoHorarioVeterinario_LanzaHorarioOcupadoException() {
+        // Arrange
+        LocalDateTime fechaHoraOriginal = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaExistente = new Cita(citaId, mascId, veterinarioMock, fechaHoraOriginal, EstadoCita.PROGRAMADA, "Control", adminId);
+
+        LocalDate nuevaFecha = LocalDate.now().plusDays(3);
+        LocalTime nuevaHora = LocalTime.of(11, 0);
+        LocalDateTime nuevaFechaHora = LocalDateTime.of(nuevaFecha, nuevaHora);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaExistente));
+        when(citaRepository.existsByVeterinarioIdAndFechaHoraAndEstadoAndIdNot(vetId, nuevaFechaHora, EstadoCita.PROGRAMADA, citaId))
+                .thenReturn(true);
+
+        // Act & Assert
+        HorarioOcupadoException ex = assertThrows(HorarioOcupadoException.class, () ->
+                citaService.reprogramarCita(citaId, request));
+        assertEquals("El veterinario ya tiene una cita registrada en esa fecha y hora", ex.getMessage());
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramar una cita en estado CANCELADA lanza IllegalStateException (400)")
+    void reprogramarCita_CitaCancelada_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaCancelada = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.CANCELADA, "Control", adminId);
+
+        LocalDate nuevaFecha = LocalDate.now().plusDays(4);
+        LocalTime nuevaHora = LocalTime.of(10, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaCancelada));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                citaService.reprogramarCita(citaId, request));
+        assertTrue(ex.getMessage().contains("Solo se pueden reprogramar citas con estado PROGRAMADA"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramar una cita en estado ATENDIDA lanza IllegalStateException (400)")
+    void reprogramarCita_CitaAtendida_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaAtendida = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.ATENDIDA, "Control", adminId);
+
+        LocalDate nuevaFecha = LocalDate.now().plusDays(4);
+        LocalTime nuevaHora = LocalTime.of(10, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaAtendida));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                citaService.reprogramarCita(citaId, request));
+        assertTrue(ex.getMessage().contains("Solo se pueden reprogramar citas con estado PROGRAMADA"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramar a fecha u hora pasada lanza IllegalArgumentException (400)")
+    void reprogramarCita_FechaPasada_LanzaIllegalArgumentException() {
+        // Arrange
+        LocalDateTime fechaHoraOriginal = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaExistente = new Cita(citaId, mascId, veterinarioMock, fechaHoraOriginal, EstadoCita.PROGRAMADA, "Control", adminId);
+
+        LocalDate fechaPasada = LocalDate.now().minusDays(1);
+        LocalTime hora = LocalTime.of(10, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(fechaPasada, hora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaExistente));
+
+        // Act & Assert
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                citaService.reprogramarCita(citaId, request));
+        assertTrue(ex.getMessage().contains("fecha u hora pasada"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramar cita inexistente lanza ResourceNotFoundException (404)")
+    void reprogramarCita_CitaInexistente_LanzaResourceNotFoundException() {
+        when(citaRepository.findById(citaId)).thenReturn(Optional.empty());
+
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(
+                LocalDate.now().plusDays(2), LocalTime.of(10, 0));
+
+        assertThrows(ResourceNotFoundException.class, () -> citaService.reprogramarCita(citaId, request));
+    }
 }
