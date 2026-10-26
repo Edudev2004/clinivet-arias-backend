@@ -85,6 +85,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    @ExceptionHandler(com.clinivet.arias.exception.HorarioOcupadoException.class)
+    public ResponseEntity<ApiErrorResponse> handleHorarioOcupado(com.clinivet.arias.exception.HorarioOcupadoException ex, HttpServletRequest request) {
+        ApiErrorResponse error = new ApiErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
     @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
     public ResponseEntity<ApiErrorResponse> handleMissingParameter(org.springframework.web.bind.MissingServletRequestParameterException ex, HttpServletRequest request) {
         String mensaje = String.format("El parámetro requerido '%s' no fue proporcionado en la solicitud", ex.getParameterName());

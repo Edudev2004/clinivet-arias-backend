@@ -3,6 +3,7 @@ package com.clinivet.arias.controller;
 import com.clinivet.arias.config.GlobalExceptionHandler;
 import com.clinivet.arias.dto.CitaRequest;
 import com.clinivet.arias.dto.CitaResponse;
+import com.clinivet.arias.exception.HorarioOcupadoException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.service.ICitaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -200,5 +201,23 @@ class CitaControllerTest {
         mockMvc.perform(get("/api/citas/{id}", citaId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("POST /api/citas con cruce de horario para el veterinario retorna 409 Conflict (RF-15)")
+    void registrarCita_ConflictoHorario_Retorna409Conflict() throws Exception {
+        LocalDate fecha = LocalDate.now().plusDays(2);
+        LocalTime hora = LocalTime.of(10, 30);
+        CitaRequest request = new CitaRequest(mascId, propId, vetId, fecha, hora, "Motivo");
+
+        when(citaService.registrarCita(any(CitaRequest.class), any()))
+                .thenThrow(new HorarioOcupadoException("El veterinario ya tiene una cita registrada en esa fecha y hora"));
+
+        mockMvc.perform(post("/api/citas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.mensaje").value("El veterinario ya tiene una cita registrada en esa fecha y hora"));
     }
 }

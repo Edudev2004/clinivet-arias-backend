@@ -2,6 +2,7 @@ package com.clinivet.arias.service;
 
 import com.clinivet.arias.dto.CitaRequest;
 import com.clinivet.arias.dto.CitaResponse;
+import com.clinivet.arias.exception.HorarioOcupadoException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.model.*;
 import com.clinivet.arias.repository.*;
@@ -266,5 +267,59 @@ class CitaServiceTest {
         when(citaRepository.findById(citaId)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> citaService.obtenerCitaPorId(citaId));
+    }
+
+    @Test
+    @DisplayName("RF-15 / RN-03: Intento de cita duplicada para el mismo veterinario en misma fecha y hora lanza HorarioOcupadoException (409)")
+    void registrarCita_VeterinarioConCitaProgramada_LanzaHorarioOcupadoException() {
+        // Arrange
+        LocalDate fecha = LocalDate.now().plusDays(2);
+        LocalTime hora = LocalTime.of(10, 30);
+        LocalDateTime fechaHora = LocalDateTime.of(fecha, hora);
+        CitaRequest request = new CitaRequest(mascId, propId, vetId, fecha, hora, "Chequeo");
+
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(propietarioRepository.findById(propId)).thenReturn(Optional.of(propietarioMock));
+        when(veterinarioRepository.findById(vetId)).thenReturn(Optional.of(veterinarioMock));
+        when(citaRepository.existsByVeterinarioIdAndFechaHoraAndEstado(vetId, fechaHora, EstadoCita.PROGRAMADA))
+                .thenReturn(true);
+
+        // Act & Assert
+        HorarioOcupadoException ex = assertThrows(HorarioOcupadoException.class, () ->
+                citaService.registrarCita(request, "admin@clinivet.pe"));
+        assertEquals("El veterinario ya tiene una cita registrada en esa fecha y hora", ex.getMessage());
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-15 / RN-07: Si el veterinario tenía una cita CANCELADA a esa misma hora, permite agendar sin conflicto")
+    void registrarCita_VeterinarioConCitaCancelada_PermiteAgendarCita() {
+        // Arrange
+        LocalDate fecha = LocalDate.now().plusDays(2);
+        LocalTime hora = LocalTime.of(10, 30);
+        LocalDateTime fechaHora = LocalDateTime.of(fecha, hora);
+        CitaRequest request = new CitaRequest(mascId, propId, vetId, fecha, hora, "Nueva cita tras cancelación");
+
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(propietarioRepository.findById(propId)).thenReturn(Optional.of(propietarioMock));
+        when(veterinarioRepository.findById(vetId)).thenReturn(Optional.of(veterinarioMock));
+        when(usuarioRepository.findByEmail("admin@clinivet.pe")).thenReturn(Optional.of(usuarioAdminMock));
+        when(citaRepository.existsByVeterinarioIdAndFechaHoraAndEstado(vetId, fechaHora, EstadoCita.PROGRAMADA))
+                .thenReturn(false);
+
+        when(citaRepository.save(any(Cita.class))).thenAnswer(invocation -> {
+            Cita guardada = invocation.getArgument(0);
+            guardada.setId(citaId);
+            return guardada;
+        });
+
+        // Act
+        CitaResponse response = citaService.registrarCita(request, "admin@clinivet.pe");
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(citaId, response.getId());
+        assertEquals("PROGRAMADA", response.getEstado());
+        verify(citaRepository, times(1)).save(any(Cita.class));
     }
 }
