@@ -54,10 +54,15 @@ El equipo trabaja bajo el modelo Gitflow, adaptado a los Requerimientos Funciona
    git commit -m "Crear entidad Usuario y repositorio JpaRepository"
    git commit -m "Implementar endpoint POST /api/auth/login con generador de token JWT"
    ```
-4. Al terminar, sube tu rama: 
-   ```bash
-   git push origin feature/RF-01-endpoint-login
+4. Al terminar, ejecuta la suite de pruebas unitarias (**Quality Gate TDD obligatorio**):
+   ```powershell
+   .\mvnw.cmd test
    ```
-5. Abre un **Pull Request hacia `develop`** (base: `develop` <- compare: `feature/RF-XX-...`), describiendo los cambios realizados y los criterios de aceptación cumplidos.
-6. Al menos un compañero revisa y aprueba el PR antes de mergear.
-7. Al cerrar un sprint completo, se abre `release/sprint-N` desde `develop` para pruebas finales, y luego se mergea a `main` con su respectiva etiqueta de versión (ej. `v1.0-sprint-1`).
+   **Regla estricta:** Ningún commit ni PR puede subirse o mergearse si hay pruebas fallidas o si falta la suite de pruebas (JUnit 5 + Mockito / MockMvc) del RF desarrollado.
+5. Sube tu rama al repositorio remoto: 
+   ```bash
+   git push origin feature/RF-XX-descripcion-corta
+   ```
+6. Abre un **Pull Request hacia `develop`** (base: `develop` <- compare: `feature/RF-XX-...`), referenciando el Issue (`Closes #N`) y adjuntando evidencia de pruebas unitarias exitosas (JUnit 5 / Mockito / MockMvc).
+7. Al menos un compañero revisa y aprueba el PR antes de mergear. **Recordar:** NO marcar "Delete branch" al mergear.
+8. Al cerrar un sprint completo, se abre `release/sprint-N` desde `develop` para pruebas finales, y luego se mergea a `main` con su respectiva etiqueta de versión (ej. `v1.0-sprint-1`).
