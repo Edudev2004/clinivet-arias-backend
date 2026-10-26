@@ -15,6 +15,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -38,6 +39,9 @@ class RoleAuthorizationTest {
 
     @MockBean
     private UserDetailsService userDetailsService;
+
+    @MockBean
+    private ITokenBlacklistService tokenBlacklistService;
 
     @Test
     @DisplayName("RF-03: Usuario sin autenticación es rechazado con HTTP 401 Unauthorized")
@@ -114,5 +118,32 @@ class RoleAuthorizationTest {
                 .andExpect(jsonPath("$.email").value("admin@clinivet.pe"))
                 .andExpect(jsonPath("$.autenticado").value(true))
                 .andExpect(jsonPath("$.roles[0]").value("ROLE_ADMINISTRADOR"));
+    }
+
+    @Test
+    @DisplayName("RF-04: Petición con token en lista negra (tras logout) es rechazada con HTTP 401 y mensaje estándar")
+    void accesoConTokenEnBlacklist_Retorna401() throws Exception {
+        String token = "mock.invalidated.jwt";
+        when(tokenBlacklistService.isTokenInvalidated(token)).thenReturn(true);
+
+        mockMvc.perform(get("/api/test/roles/admin")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.mensaje").value("La sesión ha sido cerrada. Inicie sesión nuevamente."));
+    }
+
+    @Test
+    @DisplayName("RF-04 / RNF-04: Petición con sesión inactiva es rechazada con HTTP 401 y mensaje de expiración")
+    void accesoConSesionInactiva_Retorna401() throws Exception {
+        String token = "mock.inactive.jwt";
+        when(tokenBlacklistService.isTokenInvalidated(token)).thenReturn(false);
+        when(tokenBlacklistService.isSessionInactive(token)).thenReturn(true);
+
+        mockMvc.perform(get("/api/test/roles/admin")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.mensaje").value("La sesión ha expirado por inactividad. Inicie sesión nuevamente."));
     }
 }

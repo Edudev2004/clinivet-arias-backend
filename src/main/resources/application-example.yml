@@ -43,6 +43,9 @@ jwt:
   # Tiempo de expiración del token en milisegundos.
   # 86400000 = 24 horas
   expiration-ms: 86400000
+  # Tiempo de expiración por inactividad de sesión (RF-04 / RNF-04)
+  # 1800000 = 30 minutos
+  inactivity-timeout-ms: 1800000
 
 # ── Servidor ─────────────────────────────────────────────────
 server:

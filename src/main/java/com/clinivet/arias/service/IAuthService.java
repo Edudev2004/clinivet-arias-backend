@@ -17,4 +17,11 @@ public interface IAuthService {
      * @return respuesta con el token JWT y perfil del usuario
      */
     LoginResponse login(LoginRequest request);
+
+    /**
+     * Cierra la sesión activa invalidando el token JWT (RF-04).
+     *
+     * @param authHeader cabecera Authorization con formato "Bearer <token>"
+     */
+    void logout(String authHeader);
 }

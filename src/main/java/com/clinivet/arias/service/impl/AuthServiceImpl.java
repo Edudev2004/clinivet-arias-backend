@@ -4,6 +4,7 @@ import com.clinivet.arias.dto.LoginRequest;
 import com.clinivet.arias.dto.LoginResponse;
 import com.clinivet.arias.model.Usuario;
 import com.clinivet.arias.repository.UsuarioRepository;
+import com.clinivet.arias.security.ITokenBlacklistService;
 import com.clinivet.arias.security.JwtUtil;
 import com.clinivet.arias.service.IAuthService;
 import com.google.common.base.Preconditions;
@@ -19,8 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Implementación de la lógica de negocio para autenticación de usuarios.
  * Aplica principios SOLID:
- * - SRP: Se encarga exclusivamente de la verificación de credenciales y expedición de tokens.
- * - DIP: Inyecta interfaces (UsuarioRepository, PasswordEncoder, IAuthService).
+ * - SRP: Se encarga exclusivamente de la verificación de credenciales, expedición de tokens y cierre de sesión.
+ * - DIP: Inyecta interfaces (UsuarioRepository, PasswordEncoder, IAuthService, ITokenBlacklistService).
  * - Uso de librerías del curso: Google Guava (Preconditions) y Apache Commons (StringUtils).
  */
 @Service
@@ -31,14 +32,17 @@ public class AuthServiceImpl implements IAuthService {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final ITokenBlacklistService tokenBlacklistService;
 
     // Inyección estricta por constructor (DIP)
     public AuthServiceImpl(UsuarioRepository usuarioRepository,
                            PasswordEncoder passwordEncoder,
-                           JwtUtil jwtUtil) {
+                           JwtUtil jwtUtil,
+                           ITokenBlacklistService tokenBlacklistService) {
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Override
@@ -85,6 +89,10 @@ public class AuthServiceImpl implements IAuthService {
         // Generar token JWT con claims de usuario y rol
         String token = jwtUtil.generateToken(usuario);
         String rolNombre = usuario.getRol() != null ? usuario.getRol().getNombre() : "USER";
+
+        // Registrar la actividad inicial del token
+        tokenBlacklistService.recordActivity(token);
+
         log.info("Inicio de sesión exitoso para usuario [{}] con rol [{}]", usuario.getEmail(), rolNombre);
 
         return new LoginResponse(
@@ -96,5 +104,24 @@ public class AuthServiceImpl implements IAuthService {
                 rolNombre,
                 jwtUtil.getExpirationMs()
         );
+    }
+
+    @Override
+    public void logout(String authHeader) {
+        if (StringUtils.isBlank(authHeader)) {
+            log.warn("Petición de logout sin cabecera Authorization válida");
+            return;
+        }
+
+        String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7).trim() : authHeader.trim();
+        if (StringUtils.isNotBlank(token)) {
+            try {
+                String username = jwtUtil.extractUsername(token);
+                log.info("Cierre de sesión registrado para usuario [{}] en logs de auditoría", username);
+            } catch (Exception e) {
+                log.warn("Cierre de sesión con token no parseable: {}", e.getMessage());
+            }
+            tokenBlacklistService.invalidateToken(token);
+        }
     }
 }

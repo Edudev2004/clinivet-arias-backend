@@ -78,9 +78,10 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "Cerrar sesión", description = "Invalida la sesión actual del cliente")
+    @Operation(summary = "Cerrar sesión", description = "Invalida la sesión actual del cliente agregando el token a lista negra (RF-04)")
     @ApiResponse(responseCode = "200", description = "Cierre de sesión exitoso")
-    public ResponseEntity<Map<String, String>> logout() {
+    public ResponseEntity<Map<String, String>> logout(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+        authService.logout(authHeader);
         return ResponseEntity.ok(Map.of("mensaje", "Sesión cerrada correctamente"));
     }
 }

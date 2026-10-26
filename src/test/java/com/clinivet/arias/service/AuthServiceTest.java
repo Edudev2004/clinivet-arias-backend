@@ -5,6 +5,7 @@ import com.clinivet.arias.dto.LoginResponse;
 import com.clinivet.arias.model.Rol;
 import com.clinivet.arias.model.Usuario;
 import com.clinivet.arias.repository.UsuarioRepository;
+import com.clinivet.arias.security.ITokenBlacklistService;
 import com.clinivet.arias.security.JwtUtil;
 import com.clinivet.arias.service.impl.AuthServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * Pruebas unitarias para {@link AuthServiceImpl} utilizando JUnit 5 y Mockito.
- * Valida los criterios de aceptación de RF-01 y RF-02 con identificadores UUID (APF2).
+ * Valida los criterios de aceptación de RF-01, RF-02 y RF-04 con identificadores UUID (APF2).
  */
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -40,6 +41,9 @@ class AuthServiceTest {
 
     @Mock
     private JwtUtil jwtUtil;
+
+    @Mock
+    private ITokenBlacklistService tokenBlacklistService;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -86,6 +90,7 @@ class AuthServiceTest {
 
         verify(usuarioRepository, times(1)).findByEmail("admin@clinivet.pe");
         verify(passwordEncoder, times(1)).matches("Admin123!", usuarioPrueba.getPasswordHash());
+        verify(tokenBlacklistService, times(1)).recordActivity("mocked.jwt.token");
     }
 
     @Test
@@ -132,5 +137,33 @@ class AuthServiceTest {
 
         verify(passwordEncoder, never()).matches(anyString(), anyString());
         verify(jwtUtil, never()).generateToken(any());
+    }
+
+    @Test
+    @DisplayName("RF-04: Logout con token válido extrae username e invalida el token en blacklist")
+    void logout_ConTokenValido_InvalidaTokenEnBlacklist() {
+        // Arrange
+        String authHeader = "Bearer sample.jwt.token";
+        when(jwtUtil.extractUsername("sample.jwt.token")).thenReturn("admin@clinivet.pe");
+
+        // Act
+        authService.logout(authHeader);
+
+        // Assert
+        verify(jwtUtil, times(1)).extractUsername("sample.jwt.token");
+        verify(tokenBlacklistService, times(1)).invalidateToken("sample.jwt.token");
+    }
+
+    @Test
+    @DisplayName("RF-04: Logout con header nulo o en blanco no invoca invalidación ni lanza excepción")
+    void logout_ConHeaderNuloOEnBlanco_NoInvalidaNiFalla() {
+        // Act
+        authService.logout(null);
+        authService.logout("");
+        authService.logout("   ");
+
+        // Assert
+        verify(tokenBlacklistService, never()).invalidateToken(anyString());
+        verify(jwtUtil, never()).extractUsername(anyString());
     }
 }
