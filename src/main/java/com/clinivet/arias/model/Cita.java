@@ -1,15 +1,12 @@
 package com.clinivet.arias.model;
 
 import jakarta.persistence.*;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Entidad JPA para la tabla {@code citas} (Tabla 30 de APF2).
- * Representa la reserva médica obligatoriamente asociada a una mascota y veterinario (RN-02).
+ * Entidad JPA que representa una cita médica veterinaria programada.
+ * Mapea la tabla {@code citas} según el esquema físico de APF2 (Tabla 30 / RN-02 / RN-03 / RN-07).
  */
 @Entity
 @Table(name = "citas")
@@ -20,9 +17,8 @@ public class Cita {
     @Column(name = "id")
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "mascota_id", nullable = false)
-    private Mascota mascota;
+    @Column(name = "mascota_id", nullable = false)
+    private UUID mascotaId;
 
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "veterinario_id", nullable = false)
@@ -31,17 +27,15 @@ public class Cita {
     @Column(name = "fecha_hora", nullable = false)
     private LocalDateTime fechaHora;
 
-    @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Convert(converter = EstadoCitaConverter.class)
     @Column(name = "estado", nullable = false)
-    private EstadoCita estado = EstadoCita.programada;
+    private EstadoCita estado = EstadoCita.PROGRAMADA;
 
     @Column(name = "motivo", columnDefinition = "TEXT")
     private String motivo;
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "creado_por", nullable = false)
-    private Usuario creadoPor;
+    @Column(name = "creado_por", nullable = false)
+    private UUID creadoPor;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -58,7 +52,7 @@ public class Cita {
             this.updatedAt = LocalDateTime.now();
         }
         if (this.estado == null) {
-            this.estado = EstadoCita.programada;
+            this.estado = EstadoCita.PROGRAMADA;
         }
     }
 
@@ -70,17 +64,17 @@ public class Cita {
     public Cita() {
     }
 
-    public Cita(UUID id, Mascota mascota, Veterinario veterinario, LocalDateTime fechaHora, EstadoCita estado, String motivo, Usuario creadoPor) {
+    public Cita(UUID id, UUID mascotaId, Veterinario veterinario,
+                LocalDateTime fechaHora, EstadoCita estado, String motivo, UUID creadoPor) {
         this.id = id;
-        this.mascota = mascota;
+        this.mascotaId = mascotaId;
         this.veterinario = veterinario;
         this.fechaHora = fechaHora;
-        this.estado = estado != null ? estado : EstadoCita.programada;
+        this.estado = estado != null ? estado : EstadoCita.PROGRAMADA;
         this.motivo = motivo;
         this.creadoPor = creadoPor;
     }
 
-    // Getters y Setters
     public UUID getId() {
         return id;
     }
@@ -89,12 +83,12 @@ public class Cita {
         this.id = id;
     }
 
-    public Mascota getMascota() {
-        return mascota;
+    public UUID getMascotaId() {
+        return mascotaId;
     }
 
-    public void setMascota(Mascota mascota) {
-        this.mascota = mascota;
+    public void setMascotaId(UUID mascotaId) {
+        this.mascotaId = mascotaId;
     }
 
     public Veterinario getVeterinario() {
@@ -129,11 +123,11 @@ public class Cita {
         this.motivo = motivo;
     }
 
-    public Usuario getCreadoPor() {
+    public UUID getCreadoPor() {
         return creadoPor;
     }
 
-    public void setCreadoPor(Usuario creadoPor) {
+    public void setCreadoPor(UUID creadoPor) {
         this.creadoPor = creadoPor;
     }
 
@@ -141,7 +135,15 @@ public class Cita {
         return createdAt;
     }
 
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

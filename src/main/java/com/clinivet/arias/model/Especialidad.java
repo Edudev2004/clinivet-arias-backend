@@ -4,7 +4,8 @@ import jakarta.persistence.*;
 import java.util.UUID;
 
 /**
- * Entidad JPA para la tabla {@code especialidades} (Tabla 28 de APF2).
+ * Entidad JPA que representa una especialidad médica veterinaria.
+ * Mapea la tabla {@code especialidades} según el esquema físico de APF2 (Tabla 28).
  */
 @Entity
 @Table(name = "especialidades")

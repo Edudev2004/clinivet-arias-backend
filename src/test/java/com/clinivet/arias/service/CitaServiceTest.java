@@ -245,8 +245,10 @@ class CitaServiceTest {
     void obtenerCitaPorId_CitaExiste_RetornaCitaResponse() {
         // Arrange
         LocalDateTime fechaHora = LocalDateTime.now().plusDays(2).withHour(10).withMinute(0);
-        Cita cita = new Cita(citaId, mascotaMock, veterinarioMock, fechaHora, EstadoCita.programada, "Control", usuarioAdminMock);
+        Cita cita = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.PROGRAMADA, "Control", adminId);
         when(citaRepository.findById(citaId)).thenReturn(Optional.of(cita));
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
 
         // Act
         CitaResponse response = citaService.obtenerCitaPorId(citaId);

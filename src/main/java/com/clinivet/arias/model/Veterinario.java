@@ -4,8 +4,8 @@ import jakarta.persistence.*;
 import java.util.UUID;
 
 /**
- * Entidad JPA para la tabla {@code veterinarios} (Tabla 28 de APF2).
- * Especialización de Usuario con número de colegiatura CMVP y especialidad médica.
+ * Entidad JPA que representa a un médico veterinario colegiado.
+ * Mapea la tabla {@code veterinarios} según el esquema físico de APF2 (Tabla 28).
  */
 @Entity
 @Table(name = "veterinarios")
@@ -30,10 +30,18 @@ public class Veterinario {
     @Column(name = "activo", nullable = false)
     private Boolean activo = true;
 
+    @PrePersist
+    protected void onCreate() {
+        if (this.activo == null) {
+            this.activo = true;
+        }
+    }
+
     public Veterinario() {
     }
 
-    public Veterinario(UUID id, Usuario usuario, Especialidad especialidad, String numeroColegiatura, Boolean activo) {
+    public Veterinario(UUID id, Usuario usuario, Especialidad especialidad,
+                       String numeroColegiatura, Boolean activo) {
         this.id = id;
         this.usuario = usuario;
         this.especialidad = especialidad;

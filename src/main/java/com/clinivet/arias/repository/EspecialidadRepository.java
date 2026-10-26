@@ -8,10 +8,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Repositorio Spring Data JPA para la entidad {@link Especialidad}.
+ * Repositorio de acceso a datos para la entidad {@link Especialidad}.
  */
 @Repository
 public interface EspecialidadRepository extends JpaRepository<Especialidad, UUID> {
+
+    Optional<Especialidad> findByNombre(String nombre);
 
     Optional<Especialidad> findByNombreIgnoreCase(String nombre);
 }

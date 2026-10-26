@@ -94,24 +94,29 @@ public class CitaServiceImpl implements ICitaService {
         }
 
         // 7. Determinar usuario auditor (creadoPor)
-        Usuario usuarioAuditor = null;
+        UUID creadoPorId = null;
+        String creadoPorEmail = null;
         if (StringUtils.isNotBlank(emailUsuarioActual)) {
-            usuarioAuditor = usuarioRepository.findByEmail(emailUsuarioActual).orElse(null);
+            Usuario usuarioAuditor = usuarioRepository.findByEmail(emailUsuarioActual).orElse(null);
+            if (usuarioAuditor != null) {
+                creadoPorId = usuarioAuditor.getId();
+                creadoPorEmail = usuarioAuditor.getEmail();
+            }
         }
-        if (usuarioAuditor == null) {
-            // Fallback al usuario vinculado al veterinario
-            usuarioAuditor = veterinario.getUsuario();
+        if (creadoPorId == null && veterinario.getUsuario() != null) {
+            creadoPorId = veterinario.getUsuario().getId();
+            creadoPorEmail = veterinario.getUsuario().getEmail();
         }
 
         // 8. Crear y persistir la entidad Cita (Estado inicial siempre PROGRAMADA según RF-13)
         Cita nuevaCita = new Cita(
                 null,
-                mascota,
+                mascota.getId(),
                 veterinario,
                 fechaHora,
-                EstadoCita.programada,
+                EstadoCita.PROGRAMADA,
                 request.getMotivo(),
-                usuarioAuditor
+                creadoPorId
         );
 
         Cita citaGuardada = citaRepository.save(nuevaCita);
@@ -119,7 +124,7 @@ public class CitaServiceImpl implements ICitaService {
         log.info("Cita médica [{}] agendada exitosamente para mascota [{}] con veterinario [{}] para el [{}]",
                 citaGuardada.getId(), mascota.getNombre(), veterinario.getNombreCompleto(), fechaHora);
 
-        return mapearACitaResponse(citaGuardada);
+        return mapearACitaResponse(citaGuardada, mascota, creadoPorEmail);
     }
 
     @Override
@@ -128,18 +133,26 @@ public class CitaServiceImpl implements ICitaService {
         Preconditions.checkNotNull(id, "El ID de la cita no puede ser nulo");
         Cita cita = citaRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Cita médica no encontrada con ID: " + id));
-        return mapearACitaResponse(cita);
+        Mascota mascota = null;
+        if (cita.getMascotaId() != null) {
+            mascota = mascotaRepository.findById(cita.getMascotaId()).orElse(null);
+        }
+        String creadoPorEmail = null;
+        if (cita.getCreadoPor() != null) {
+            creadoPorEmail = usuarioRepository.findById(cita.getCreadoPor())
+                    .map(Usuario::getEmail)
+                    .orElse(null);
+        }
+        return mapearACitaResponse(cita, mascota, creadoPorEmail);
     }
 
-    private CitaResponse mapearACitaResponse(Cita cita) {
-        Mascota masc = cita.getMascota();
+    private CitaResponse mapearACitaResponse(Cita cita, Mascota masc, String creadoPorEmail) {
         Propietario prop = masc != null ? masc.getPropietario() : null;
         Veterinario vet = cita.getVeterinario();
-        Usuario creadoPor = cita.getCreadoPor();
 
         return new CitaResponse(
                 cita.getId(),
-                masc != null ? masc.getId() : null,
+                cita.getMascotaId(),
                 masc != null ? masc.getNombre() : null,
                 masc != null ? masc.getEspecie() : null,
                 prop != null ? prop.getId() : null,
@@ -154,8 +167,8 @@ public class CitaServiceImpl implements ICitaService {
                 cita.getFechaHora(),
                 cita.getEstado() != null ? cita.getEstado().getDisplayValue() : "PROGRAMADA",
                 cita.getMotivo(),
-                creadoPor != null ? creadoPor.getId() : null,
-                creadoPor != null ? creadoPor.getEmail() : null,
+                cita.getCreadoPor(),
+                creadoPorEmail,
                 cita.getCreatedAt()
         );
     }

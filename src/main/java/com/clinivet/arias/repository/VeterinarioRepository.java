@@ -9,7 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Repositorio Spring Data JPA para la entidad {@link Veterinario}.
+ * Repositorio de acceso a datos para la entidad {@link Veterinario}.
  */
 @Repository
 public interface VeterinarioRepository extends JpaRepository<Veterinario, UUID> {

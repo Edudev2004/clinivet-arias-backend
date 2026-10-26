@@ -4,41 +4,38 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
- * Enumeración que representa el ciclo de vida de una cita médica (APF2 Tabla 30 y Tabla 33).
- * Mapea a tipo PostgreSQL {@code estado_cita}: 'programada', 'atendida', 'cancelada'.
+ * Estados posibles de una cita médica según el catálogo oficial de APF2 (Tabla 33).
  */
 public enum EstadoCita {
-    programada("programada", "PROGRAMADA"),
-    atendida("atendida", "ATENDIDA"),
-    cancelada("cancelada", "CANCELADA");
+    PROGRAMADA("programada"),
+    ATENDIDA("atendida"),
+    CANCELADA("cancelada");
 
-    private final String dbValue;
-    private final String displayValue;
+    private final String codigo;
 
-    EstadoCita(String dbValue, String displayValue) {
-        this.dbValue = dbValue;
-        this.displayValue = displayValue;
+    EstadoCita(String codigo) {
+        this.codigo = codigo;
     }
 
-    public String getDbValue() {
-        return dbValue;
+    public String getCodigo() {
+        return codigo;
     }
 
     @JsonValue
     public String getDisplayValue() {
-        return displayValue;
+        return name();
     }
 
     @JsonCreator
-    public static EstadoCita fromString(String value) {
-        if (value == null) {
+    public static EstadoCita fromCodigo(String codigo) {
+        if (codigo == null) {
             return null;
         }
         for (EstadoCita e : values()) {
-            if (e.dbValue.equalsIgnoreCase(value) || e.displayValue.equalsIgnoreCase(value) || e.name().equalsIgnoreCase(value)) {
+            if (e.codigo.equalsIgnoreCase(codigo) || e.name().equalsIgnoreCase(codigo)) {
                 return e;
             }
         }
-        throw new IllegalArgumentException("Estado de cita no válido: " + value);
+        throw new IllegalArgumentException("Estado de cita no válido: " + codigo);
     }
 }
