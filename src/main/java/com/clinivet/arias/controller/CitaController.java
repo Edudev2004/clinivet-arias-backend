@@ -53,6 +53,26 @@ public class CitaController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @GetMapping
+    @Operation(summary = "Listar citas médicas con filtros dinámicos y paginación",
+            description = "Consulta la lista paginada de citas médicas permitiendo filtrar opcionalmente por veterinario, fecha puntual, rango de fechas y estado (RF-18). Siempre ordenado por fecha y hora ascendente.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Listado paginado de citas obtenido exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Parámetros de búsqueda inválidos o estado no reconocido",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<org.springframework.data.domain.Page<CitaResponse>> listarCitas(
+            @RequestParam(name = "veterinarioId", required = false) UUID veterinarioId,
+            @RequestParam(name = "fecha", required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha,
+            @RequestParam(name = "fechaInicio", required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fechaInicio,
+            @RequestParam(name = "fechaFin", required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fechaFin,
+            @RequestParam(name = "estado", required = false) String estado,
+            @org.springframework.data.web.PageableDefault(size = 10) org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.domain.Page<CitaResponse> response =
+                citaService.listarCitasConFiltros(veterinarioId, fecha, fechaInicio, fechaFin, estado, pageable);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Consultar cita por identificador único (UUID)",
             description = "Retorna el detalle completo y estado de la cita médica.")

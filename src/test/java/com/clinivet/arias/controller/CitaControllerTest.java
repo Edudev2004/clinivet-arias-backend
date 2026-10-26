@@ -59,6 +59,7 @@ class CitaControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(citaController)
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new org.springframework.data.web.PageableHandlerMethodArgumentResolver())
                 .build();
 
         objectMapper = new ObjectMapper();
@@ -356,5 +357,57 @@ class CitaControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.mensaje").value("No se puede cancelar una cita que ya fue atendida"));
+    }
+
+    @Test
+    @DisplayName("GET /api/citas sin filtros retorna 200 OK con página de citas (RF-18)")
+    void listarCitas_SinFiltros_Retorna200OkConPagina() throws Exception {
+        CitaResponse c1 = buildSampleResponse();
+        org.springframework.data.domain.Page<CitaResponse> page =
+                new org.springframework.data.domain.PageImpl<>(java.util.List.of(c1), org.springframework.data.domain.PageRequest.of(0, 10), 1);
+
+        when(citaService.listarCitasConFiltros(any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        mockMvc.perform(get("/api/citas")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(citaId.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /citas alias de ruta retorna 200 OK con página de citas (RF-18)")
+    void listarCitas_RutaAlias_Retorna200OkConPagina() throws Exception {
+        CitaResponse c1 = buildSampleResponse();
+        org.springframework.data.domain.Page<CitaResponse> page =
+                new org.springframework.data.domain.PageImpl<>(java.util.List.of(c1), org.springframework.data.domain.PageRequest.of(0, 10), 1);
+
+        when(citaService.listarCitasConFiltros(any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        mockMvc.perform(get("/citas")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(citaId.toString()));
+    }
+
+    @Test
+    @DisplayName("GET /api/citas con filtros combinados retorna 200 OK (RF-18)")
+    void listarCitas_ConFiltrosCombinados_Retorna200Ok() throws Exception {
+        CitaResponse c1 = buildSampleResponse();
+        org.springframework.data.domain.Page<CitaResponse> page =
+                new org.springframework.data.domain.PageImpl<>(java.util.List.of(c1), org.springframework.data.domain.PageRequest.of(0, 5), 1);
+
+        when(citaService.listarCitasConFiltros(eq(vetId), any(), any(), any(), eq("PROGRAMADA"), any())).thenReturn(page);
+
+        mockMvc.perform(get("/api/citas")
+                        .param("veterinarioId", vetId.toString())
+                        .param("estado", "PROGRAMADA")
+                        .param("page", "0")
+                        .param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].veterinarioId").value(vetId.toString()))
+                .andExpect(jsonPath("$.content[0].estado").value("PROGRAMADA"));
     }
 }

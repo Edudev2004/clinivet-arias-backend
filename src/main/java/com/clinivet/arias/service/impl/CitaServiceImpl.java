@@ -6,14 +6,21 @@ import com.clinivet.arias.exception.HorarioOcupadoException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.model.*;
 import com.clinivet.arias.repository.*;
+import com.clinivet.arias.repository.specification.CitaSpecification;
 import com.clinivet.arias.service.ICitaService;
 import com.google.common.base.Preconditions;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -254,6 +261,49 @@ public class CitaServiceImpl implements ICitaService {
                     .orElse(null);
         }
         return mapearACitaResponse(citaGuardada, mascota, creadoPorEmail);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<CitaResponse> listarCitasConFiltros(UUID veterinarioId,
+                                                    LocalDate fecha,
+                                                    LocalDate fechaInicio,
+                                                    LocalDate fechaFin,
+                                                    String estado,
+                                                    Pageable pageable) {
+        EstadoCita estadoEnum = null;
+        if (StringUtils.isNotBlank(estado)) {
+            estadoEnum = EstadoCita.fromCodigo(estado.trim());
+        }
+
+        // Ordenamiento por defecto: ascendente por fechaHora
+        Sort sortAsc = Sort.by(Sort.Direction.ASC, "fechaHora");
+        Pageable sortedPageable;
+        if (pageable != null && pageable.isPaged()) {
+            sortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortAsc);
+        } else {
+            sortedPageable = PageRequest.of(0, 10, sortAsc);
+        }
+
+        Specification<Cita> spec = CitaSpecification.conFiltros(veterinarioId, fecha, fechaInicio, fechaFin, estadoEnum);
+        Page<Cita> paginaCitas = citaRepository.findAll(spec, sortedPageable);
+
+        log.debug("Consulta de citas ejecutada con filtros (vet={}, fecha={}, rango=[{}-{}], estado={}): {} registros encontrados",
+                veterinarioId, fecha, fechaInicio, fechaFin, estado, paginaCitas.getTotalElements());
+
+        return paginaCitas.map(cita -> {
+            Mascota mascota = null;
+            if (cita.getMascotaId() != null) {
+                mascota = mascotaRepository.findById(cita.getMascotaId()).orElse(null);
+            }
+            String creadoPorEmail = null;
+            if (cita.getCreadoPor() != null) {
+                creadoPorEmail = usuarioRepository.findById(cita.getCreadoPor())
+                        .map(Usuario::getEmail)
+                        .orElse(null);
+            }
+            return mapearACitaResponse(cita, mascota, creadoPorEmail);
+        });
     }
 
     private CitaResponse mapearACitaResponse(Cita cita, Mascota masc, String creadoPorEmail) {
