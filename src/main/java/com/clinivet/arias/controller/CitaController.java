@@ -121,4 +121,21 @@ public class CitaController {
         CitaResponse response = citaService.cancelarCita(id);
         return ResponseEntity.ok(response);
     }
+
+    @PatchMapping("/{id}/estado")
+    @Operation(summary = "Actualizar estado de una cita médica",
+            description = "Transiciona el estado de una cita de PROGRAMADA hacia ATENDIDA o CANCELADA (RF-19).")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Estado de cita médica actualizado exitosamente",
+                    content = @Content(schema = @Schema(implementation = CitaResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Transición no permitida o la cita ya fue atendida/cancelada",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Cita no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<CitaResponse> actualizarEstadoCita(@PathVariable("id") UUID id,
+                                                             @Valid @RequestBody com.clinivet.arias.dto.CitaEstadoRequest request) {
+        CitaResponse response = citaService.actualizarEstadoCita(id, request);
+        return ResponseEntity.ok(response);
+    }
 }
