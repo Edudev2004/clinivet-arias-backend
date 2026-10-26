@@ -85,4 +85,20 @@ public class CitaController {
         CitaResponse response = citaService.reprogramarCita(id, request);
         return ResponseEntity.ok(response);
     }
+
+    @PatchMapping("/{id}/cancelar")
+    @Operation(summary = "Cancelar cita médica conservando el registro histórico",
+            description = "Cambia el estado de una cita a CANCELADA sin eliminarla de la base de datos (RF-17 / RN-07).")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Cita médica cancelada exitosamente",
+                    content = @Content(schema = @Schema(implementation = CitaResponse.class))),
+            @ApiResponse(responseCode = "400", description = "La cita ya está cancelada o atendida",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Cita no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<CitaResponse> cancelarCita(@PathVariable("id") UUID id) {
+        CitaResponse response = citaService.cancelarCita(id);
+        return ResponseEntity.ok(response);
+    }
 }

@@ -214,6 +214,48 @@ public class CitaServiceImpl implements ICitaService {
         return mapearACitaResponse(citaGuardada, mascota, creadoPorEmail);
     }
 
+    @Override
+    @Transactional
+    public CitaResponse cancelarCita(UUID id) {
+        Preconditions.checkNotNull(id, "El ID de la cita no puede ser nulo");
+
+        Cita cita = citaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cita médica no encontrada con ID: " + id));
+
+        if (cita.getEstado() == EstadoCita.CANCELADA) {
+            log.warn("Rechazo de cancelación: la cita [{}] ya se encuentra cancelada", id);
+            throw new IllegalStateException("La cita ya se encuentra cancelada");
+        }
+
+        if (cita.getEstado() == EstadoCita.ATENDIDA) {
+            log.warn("Rechazo de cancelación: la cita [{}] ya fue atendida y no puede cancelarse", id);
+            throw new IllegalStateException("No se puede cancelar una cita que ya fue atendida");
+        }
+
+        if (cita.getEstado() != EstadoCita.PROGRAMADA) {
+            log.warn("Rechazo de cancelación: la cita [{}] no se encuentra en estado PROGRAMADA (estado actual: [{}])",
+                    id, cita.getEstado());
+            throw new IllegalStateException("Solo se pueden cancelar citas con estado PROGRAMADA");
+        }
+
+        cita.setEstado(EstadoCita.CANCELADA);
+        Cita citaGuardada = citaRepository.save(cita);
+
+        log.info("Cita médica [{}] cancelada exitosamente conservando el registro histórico en base de datos (RN-07)", id);
+
+        Mascota mascota = null;
+        if (citaGuardada.getMascotaId() != null) {
+            mascota = mascotaRepository.findById(citaGuardada.getMascotaId()).orElse(null);
+        }
+        String creadoPorEmail = null;
+        if (citaGuardada.getCreadoPor() != null) {
+            creadoPorEmail = usuarioRepository.findById(citaGuardada.getCreadoPor())
+                    .map(Usuario::getEmail)
+                    .orElse(null);
+        }
+        return mapearACitaResponse(citaGuardada, mascota, creadoPorEmail);
+    }
+
     private CitaResponse mapearACitaResponse(Cita cita, Mascota masc, String creadoPorEmail) {
         Propietario prop = masc != null ? masc.getPropietario() : null;
         Veterinario vet = cita.getVeterinario();

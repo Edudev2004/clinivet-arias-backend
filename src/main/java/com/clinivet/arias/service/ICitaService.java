@@ -36,4 +36,12 @@ public interface ICitaService {
      * @return detalle actualizado de la cita médica
      */
     CitaResponse reprogramarCita(UUID id, com.clinivet.arias.dto.CitaReprogramarRequest request);
+
+    /**
+     * Cancela una cita médica conservando el registro histórico en base de datos (RF-17 / RN-07).
+     *
+     * @param id identificador UUID de la cita
+     * @return detalle actualizado de la cita médica con estado CANCELADA
+     */
+    CitaResponse cancelarCita(UUID id);
 }

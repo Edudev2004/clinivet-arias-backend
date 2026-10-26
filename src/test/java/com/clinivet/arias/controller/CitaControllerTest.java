@@ -291,4 +291,70 @@ class CitaControllerTest {
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.mensaje").value("Solo se pueden reprogramar citas con estado PROGRAMADA"));
     }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/cancelar retorna 200 OK con estado CANCELADA (RF-17)")
+    void cancelarCita_PeticionValida_Retorna200Ok() throws Exception {
+        LocalDate fecha = LocalDate.now().plusDays(2);
+        LocalTime hora = LocalTime.of(10, 30);
+        LocalDateTime fechaHora = LocalDateTime.of(fecha, hora);
+
+        CitaResponse response = new CitaResponse(
+                citaId, mascId, "Bobby", "Canino", propId, "Carlos Mendoza", "45892314", "987123456",
+                vetId, "Beckhan Elias", "Medicina General", fecha, hora, fechaHora, "CANCELADA",
+                "Motivo", adminId, "admin@clinivet.pe", LocalDateTime.now()
+        );
+
+        when(citaService.cancelarCita(eq(citaId))).thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/cancelar", citaId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()))
+                .andExpect(jsonPath("$.estado").value("CANCELADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /citas/{id}/cancelar alias de ruta retorna 200 OK (RF-17)")
+    void cancelarCita_RutaAlias_Retorna200Ok() throws Exception {
+        LocalDate fecha = LocalDate.now().plusDays(2);
+        LocalTime hora = LocalTime.of(10, 30);
+        LocalDateTime fechaHora = LocalDateTime.of(fecha, hora);
+
+        CitaResponse response = new CitaResponse(
+                citaId, mascId, "Bobby", "Canino", propId, "Carlos Mendoza", "45892314", "987123456",
+                vetId, "Beckhan Elias", "Medicina General", fecha, hora, fechaHora, "CANCELADA",
+                "Motivo", adminId, "admin@clinivet.pe", LocalDateTime.now()
+        );
+
+        when(citaService.cancelarCita(eq(citaId))).thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/citas/{id}/cancelar", citaId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()))
+                .andExpect(jsonPath("$.estado").value("CANCELADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/cancelar con cita ya cancelada retorna 400 Bad Request (RF-17)")
+    void cancelarCita_CitaYaCancelada_Retorna400BadRequest() throws Exception {
+        when(citaService.cancelarCita(eq(citaId)))
+                .thenThrow(new IllegalStateException("La cita ya se encuentra cancelada"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/cancelar", citaId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensaje").value("La cita ya se encuentra cancelada"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/cancelar con cita ya atendida retorna 400 Bad Request (RF-17)")
+    void cancelarCita_CitaYaAtendida_Retorna400BadRequest() throws Exception {
+        when(citaService.cancelarCita(eq(citaId)))
+                .thenThrow(new IllegalStateException("No se puede cancelar una cita que ya fue atendida"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/cancelar", citaId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensaje").value("No se puede cancelar una cita que ya fue atendida"));
+    }
 }
