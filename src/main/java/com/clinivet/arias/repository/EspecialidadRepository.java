@@ -14,4 +14,6 @@ import java.util.UUID;
 public interface EspecialidadRepository extends JpaRepository<Especialidad, UUID> {
 
     Optional<Especialidad> findByNombre(String nombre);
+
+    Optional<Especialidad> findByNombreIgnoreCase(String nombre);
 }

@@ -17,4 +17,6 @@ public interface VeterinarioRepository extends JpaRepository<Veterinario, UUID> 
     Optional<Veterinario> findByUsuarioId(UUID usuarioId);
 
     List<Veterinario> findByActivoTrue();
+
+    List<Veterinario> findByEspecialidadIdAndActivoTrue(UUID especialidadId);
 }

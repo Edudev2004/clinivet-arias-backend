@@ -46,7 +46,7 @@ public class Veterinario {
         this.usuario = usuario;
         this.especialidad = especialidad;
         this.numeroColegiatura = numeroColegiatura;
-        this.activo = activo;
+        this.activo = activo != null ? activo : true;
     }
 
     public UUID getId() {
@@ -87,5 +87,13 @@ public class Veterinario {
 
     public void setActivo(Boolean activo) {
         this.activo = activo;
+    }
+
+    public String getNombreCompleto() {
+        if (usuario != null) {
+            return (usuario.getNombre() != null ? usuario.getNombre() : "") + " " +
+                   (usuario.getApellido() != null ? usuario.getApellido() : "");
+        }
+        return "";
     }
 }
