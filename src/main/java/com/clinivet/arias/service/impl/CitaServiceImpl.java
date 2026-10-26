@@ -2,6 +2,7 @@ package com.clinivet.arias.service.impl;
 
 import com.clinivet.arias.dto.CitaRequest;
 import com.clinivet.arias.dto.CitaResponse;
+import com.clinivet.arias.exception.HorarioOcupadoException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.model.*;
 import com.clinivet.arias.repository.*;
@@ -93,7 +94,19 @@ public class CitaServiceImpl implements ICitaService {
             throw new IllegalArgumentException("El médico veterinario seleccionado se encuentra inactivo");
         }
 
-        // 7. Determinar usuario auditor (creadoPor)
+        // 7. Validar prevención de cruces de horario para el veterinario (RN-03 / RF-15)
+        boolean horarioOcupado = citaRepository.existsByVeterinarioIdAndFechaHoraAndEstado(
+                veterinario.getId(),
+                fechaHora,
+                EstadoCita.PROGRAMADA
+        );
+        if (horarioOcupado) {
+            log.warn("Conflicto de agenda: el veterinario [{}] ya cuenta con una cita PROGRAMADA en [{}]",
+                    veterinario.getId(), fechaHora);
+            throw new HorarioOcupadoException("El veterinario ya tiene una cita registrada en esa fecha y hora");
+        }
+
+        // 8. Determinar usuario auditor (creadoPor)
         UUID creadoPorId = null;
         String creadoPorEmail = null;
         if (StringUtils.isNotBlank(emailUsuarioActual)) {
