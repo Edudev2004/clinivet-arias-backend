@@ -1,6 +1,7 @@
 package com.clinivet.arias.controller;
 
 import com.clinivet.arias.config.GlobalExceptionHandler;
+import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.PropietarioCreateRequest;
 import com.clinivet.arias.dto.PropietarioResponse;
 import com.clinivet.arias.dto.PropietarioUpdateRequest;
@@ -25,6 +26,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -63,13 +66,15 @@ class PropietarioControllerTest {
 
     @BeforeEach
     void setUp() {
+        objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
         mockMvc = MockMvcBuilders.standaloneSetup(propietarioController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
+                .setMessageConverters(new org.springframework.http.converter.json.MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
-
-        objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
 
         responseValida = new PropietarioResponse(
                 PROPIETARIO_ID,
@@ -330,5 +335,70 @@ class PropietarioControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.error").value("Bad Request"));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-08: PRUEBAS DE CONSULTA DE MASCOTAS (GET /api/propietarios/{id}/mascotas)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("GET /api/propietarios/{id}/mascotas: Retorna 200 OK con lista de mascotas (RF-08)")
+    void listarMascotas_conMascotas_retorna200() throws Exception {
+        UUID mascotaId = UUID.fromString("f0000000-0000-0000-0000-000000000001");
+        MascotaResponse m1 = new MascotaResponse(
+                mascotaId,
+                "Firulais",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("28.50"),
+                "https://storage.supabase.co/clinivet/avatars/firulais.png",
+                true,
+                PROPIETARIO_ID,
+                "Carlos Mendoza Ramos",
+                LocalDateTime.of(2026, 10, 27, 10, 0)
+        );
+
+        when(propietarioService.listarMascotasPorPropietario(PROPIETARIO_ID)).thenReturn(List.of(m1));
+
+        mockMvc.perform(get("/api/propietarios/{id}/mascotas", PROPIETARIO_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(mascotaId.toString()))
+                .andExpect(jsonPath("$[0].nombre").value("Firulais"))
+                .andExpect(jsonPath("$[0].especie").value("Canino"))
+                .andExpect(jsonPath("$[0].raza").value("Golden Retriever"))
+                .andExpect(jsonPath("$[0].sexo").value("Macho"))
+                .andExpect(jsonPath("$[0].fechaNacimiento").value("2022-03-10"))
+                .andExpect(jsonPath("$[0].pesoActualKg").value(28.50))
+                .andExpect(jsonPath("$[0].propietarioId").value(PROPIETARIO_ID.toString()))
+                .andExpect(jsonPath("$[0].propietarioNombre").value("Carlos Mendoza Ramos"));
+    }
+
+    @Test
+    @DisplayName("GET /api/propietarios/{id}/mascotas: Retorna 200 OK con lista vacía cuando no tiene mascotas (RF-08)")
+    void listarMascotas_sinMascotas_retornaListaVacia() throws Exception {
+        when(propietarioService.listarMascotasPorPropietario(PROPIETARIO_ID)).thenReturn(Collections.emptyList());
+
+        mockMvc.perform(get("/api/propietarios/{id}/mascotas", PROPIETARIO_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    @DisplayName("GET /api/propietarios/{id}/mascotas: Retorna 404 Not Found cuando el propietario no existe (RF-08)")
+    void listarMascotas_propietarioNoExiste_retorna404() throws Exception {
+        UUID noExistente = UUID.randomUUID();
+        when(propietarioService.listarMascotasPorPropietario(noExistente))
+                .thenThrow(new ResourceNotFoundException("Propietario no encontrado con ID: " + noExistente));
+
+        mockMvc.perform(get("/api/propietarios/{id}/mascotas", noExistente))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.mensaje").value("Propietario no encontrado con ID: " + noExistente));
     }
 }

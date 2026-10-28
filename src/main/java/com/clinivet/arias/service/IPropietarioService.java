@@ -1,7 +1,11 @@
 package com.clinivet.arias.service;
 
+import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.PropietarioCreateRequest;
 import com.clinivet.arias.dto.PropietarioResponse;
+import com.clinivet.arias.dto.PropietarioUpdateRequest;
+
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -44,5 +48,15 @@ public interface IPropietarioService {
      * @param request datos a actualizar
      * @return datos actualizados del propietario
      */
-    PropietarioResponse actualizar(UUID id, com.clinivet.arias.dto.PropietarioUpdateRequest request);
+    PropietarioResponse actualizar(UUID id, PropietarioUpdateRequest request);
+
+    /**
+     * Consulta todas las mascotas asociadas a un propietario (RF-08).
+     * Si el propietario no existe, lanza ResourceNotFoundException (404).
+     * Si el propietario no tiene mascotas, retorna una lista vacía (200).
+     *
+     * @param propietarioId identificador único del propietario
+     * @return lista de mascotas vinculadas
+     */
+    List<MascotaResponse> listarMascotasPorPropietario(UUID propietarioId);
 }

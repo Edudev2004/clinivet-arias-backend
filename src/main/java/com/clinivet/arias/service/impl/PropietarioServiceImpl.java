@@ -1,9 +1,12 @@
 package com.clinivet.arias.service.impl;
 
+import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.PropietarioCreateRequest;
 import com.clinivet.arias.dto.PropietarioResponse;
+import com.clinivet.arias.dto.PropietarioUpdateRequest;
 import com.clinivet.arias.exception.DuplicateResourceException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
+import com.clinivet.arias.model.Mascota;
 import com.clinivet.arias.model.Propietario;
 import com.clinivet.arias.repository.MascotaRepository;
 import com.clinivet.arias.repository.PropietarioRepository;
@@ -175,6 +178,53 @@ public class PropietarioServiceImpl implements IPropietarioService {
                 actualizado.getNombre(), actualizado.getApellido(), id);
 
         return mapearAResponse(actualizado);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MascotaResponse> listarMascotasPorPropietario(UUID propietarioId) {
+        Preconditions.checkNotNull(propietarioId, "El identificador del propietario no puede ser nulo");
+
+        log.debug("Consultando mascotas del propietario [{}] (RF-08)", propietarioId);
+
+        // 1. Validar que el propietario exista (404 si no existe)
+        Propietario propietario = propietarioRepository.findById(propietarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Propietario no encontrado con ID: " + propietarioId));
+
+        // 2. Obtener lista de mascotas activas vinculadas
+        List<Mascota> mascotas = mascotaRepository.findByPropietarioIdAndActivoTrue(propietarioId);
+
+        log.info("Se encontraron [{}] mascotas para el propietario [{}] (RF-08)", mascotas.size(), propietarioId);
+
+        String nombreCompleto = propietario.getNombre() + " " + propietario.getApellido();
+
+        return mascotas.stream()
+                .map(m -> mapearMascotaAResponse(m, nombreCompleto))
+                .toList();
+    }
+
+    private MascotaResponse mapearMascotaAResponse(Mascota m, String propietarioNombre) {
+        UUID propId = m.getPropietario() != null ? m.getPropietario().getId() : null;
+        String propNom = propietarioNombre;
+        if (m.getPropietario() != null && m.getPropietario().getNombre() != null) {
+            propNom = m.getPropietario().getNombre() + " " + m.getPropietario().getApellido();
+        }
+
+        return new MascotaResponse(
+                m.getId(),
+                m.getNombre(),
+                m.getEspecie(),
+                m.getRaza(),
+                m.getColor(),
+                m.getSexo(),
+                m.getFechaNacimiento(),
+                m.getPesoActualKg(),
+                m.getFotoUrl(),
+                m.getActivo(),
+                propId,
+                propNom,
+                m.getCreatedAt()
+        );
     }
 
     private PropietarioResponse mapearAResponse(Propietario p) {
