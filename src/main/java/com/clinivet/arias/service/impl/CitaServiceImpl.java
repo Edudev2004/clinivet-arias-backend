@@ -6,14 +6,21 @@ import com.clinivet.arias.exception.HorarioOcupadoException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.model.*;
 import com.clinivet.arias.repository.*;
+import com.clinivet.arias.repository.specification.CitaSpecification;
 import com.clinivet.arias.service.ICitaService;
 import com.google.common.base.Preconditions;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -157,6 +164,192 @@ public class CitaServiceImpl implements ICitaService {
                     .orElse(null);
         }
         return mapearACitaResponse(cita, mascota, creadoPorEmail);
+    }
+
+    @Override
+    @Transactional
+    public CitaResponse reprogramarCita(UUID id, com.clinivet.arias.dto.CitaReprogramarRequest request) {
+        Preconditions.checkNotNull(id, "El ID de la cita no puede ser nulo");
+        Preconditions.checkNotNull(request, "La solicitud de reprogramación no puede ser nula");
+        Preconditions.checkNotNull(request.getNuevaFecha(), "La nueva fecha es requerida");
+        Preconditions.checkNotNull(request.getNuevaHora(), "La nueva hora es requerida");
+
+        Cita cita = citaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cita médica no encontrada con ID: " + id));
+
+        if (cita.getEstado() != EstadoCita.PROGRAMADA) {
+            log.warn("Rechazo de reprogramación: la cita [{}] se encuentra en estado [{}] y solo se pueden reprogramar citas PROGRAMADAS",
+                    id, cita.getEstado());
+            throw new IllegalStateException("Solo se pueden reprogramar citas con estado PROGRAMADA");
+        }
+
+        LocalDateTime nuevaFechaHora = LocalDateTime.of(request.getNuevaFecha(), request.getNuevaHora());
+        if (nuevaFechaHora.isBefore(LocalDateTime.now())) {
+            log.warn("Rechazo de reprogramación: la nueva fecha/hora [{}] se encuentra en el pasado", nuevaFechaHora);
+            throw new IllegalArgumentException("No se puede reprogramar una cita a una fecha u hora pasada");
+        }
+
+        // Validar cruce de horario para el veterinario en la nueva fecha y hora excluyendo la cita actual
+        boolean horarioOcupado = citaRepository.existsByVeterinarioIdAndFechaHoraAndEstadoAndIdNot(
+                cita.getVeterinario().getId(),
+                nuevaFechaHora,
+                EstadoCita.PROGRAMADA,
+                cita.getId()
+        );
+
+        if (horarioOcupado) {
+            log.warn("Conflicto al reprogramar cita [{}]: el veterinario [{}] ya cuenta con una cita PROGRAMADA en [{}]",
+                    id, cita.getVeterinario().getId(), nuevaFechaHora);
+            throw new HorarioOcupadoException("El veterinario ya tiene una cita registrada en esa fecha y hora");
+        }
+
+        cita.setFechaHora(nuevaFechaHora);
+        Cita citaGuardada = citaRepository.save(cita);
+
+        log.info("Cita médica [{}] reprogramada exitosamente a la nueva fecha y hora [{}]", id, nuevaFechaHora);
+
+        Mascota mascota = null;
+        if (citaGuardada.getMascotaId() != null) {
+            mascota = mascotaRepository.findById(citaGuardada.getMascotaId()).orElse(null);
+        }
+        String creadoPorEmail = null;
+        if (citaGuardada.getCreadoPor() != null) {
+            creadoPorEmail = usuarioRepository.findById(citaGuardada.getCreadoPor())
+                    .map(Usuario::getEmail)
+                    .orElse(null);
+        }
+        return mapearACitaResponse(citaGuardada, mascota, creadoPorEmail);
+    }
+
+    @Override
+    @Transactional
+    public CitaResponse cancelarCita(UUID id) {
+        Preconditions.checkNotNull(id, "El ID de la cita no puede ser nulo");
+
+        Cita cita = citaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cita médica no encontrada con ID: " + id));
+
+        if (cita.getEstado() == EstadoCita.CANCELADA) {
+            log.warn("Rechazo de cancelación: la cita [{}] ya se encuentra cancelada", id);
+            throw new IllegalStateException("La cita ya se encuentra cancelada");
+        }
+
+        if (cita.getEstado() == EstadoCita.ATENDIDA) {
+            log.warn("Rechazo de cancelación: la cita [{}] ya fue atendida y no puede cancelarse", id);
+            throw new IllegalStateException("No se puede cancelar una cita que ya fue atendida");
+        }
+
+        if (cita.getEstado() != EstadoCita.PROGRAMADA) {
+            log.warn("Rechazo de cancelación: la cita [{}] no se encuentra en estado PROGRAMADA (estado actual: [{}])",
+                    id, cita.getEstado());
+            throw new IllegalStateException("Solo se pueden cancelar citas con estado PROGRAMADA");
+        }
+
+        cita.setEstado(EstadoCita.CANCELADA);
+        Cita citaGuardada = citaRepository.save(cita);
+
+        log.info("Cita médica [{}] cancelada exitosamente conservando el registro histórico en base de datos (RN-07)", id);
+
+        Mascota mascota = null;
+        if (citaGuardada.getMascotaId() != null) {
+            mascota = mascotaRepository.findById(citaGuardada.getMascotaId()).orElse(null);
+        }
+        String creadoPorEmail = null;
+        if (citaGuardada.getCreadoPor() != null) {
+            creadoPorEmail = usuarioRepository.findById(citaGuardada.getCreadoPor())
+                    .map(Usuario::getEmail)
+                    .orElse(null);
+        }
+        return mapearACitaResponse(citaGuardada, mascota, creadoPorEmail);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<CitaResponse> listarCitasConFiltros(UUID veterinarioId,
+                                                    LocalDate fecha,
+                                                    LocalDate fechaInicio,
+                                                    LocalDate fechaFin,
+                                                    String estado,
+                                                    Pageable pageable) {
+        EstadoCita estadoEnum = null;
+        if (StringUtils.isNotBlank(estado)) {
+            estadoEnum = EstadoCita.fromCodigo(estado.trim());
+        }
+
+        // Ordenamiento por defecto: ascendente por fechaHora
+        Sort sortAsc = Sort.by(Sort.Direction.ASC, "fechaHora");
+        Pageable sortedPageable;
+        if (pageable != null && pageable.isPaged()) {
+            sortedPageable = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortAsc);
+        } else {
+            sortedPageable = PageRequest.of(0, 10, sortAsc);
+        }
+
+        Specification<Cita> spec = CitaSpecification.conFiltros(veterinarioId, fecha, fechaInicio, fechaFin, estadoEnum);
+        Page<Cita> paginaCitas = citaRepository.findAll(spec, sortedPageable);
+
+        log.debug("Consulta de citas ejecutada con filtros (vet={}, fecha={}, rango=[{}-{}], estado={}): {} registros encontrados",
+                veterinarioId, fecha, fechaInicio, fechaFin, estado, paginaCitas.getTotalElements());
+
+        return paginaCitas.map(cita -> {
+            Mascota mascota = null;
+            if (cita.getMascotaId() != null) {
+                mascota = mascotaRepository.findById(cita.getMascotaId()).orElse(null);
+            }
+            String creadoPorEmail = null;
+            if (cita.getCreadoPor() != null) {
+                creadoPorEmail = usuarioRepository.findById(cita.getCreadoPor())
+                        .map(Usuario::getEmail)
+                        .orElse(null);
+            }
+            return mapearACitaResponse(cita, mascota, creadoPorEmail);
+        });
+    }
+
+    @Override
+    @Transactional
+    public CitaResponse actualizarEstadoCita(UUID id, com.clinivet.arias.dto.CitaEstadoRequest request) {
+        Preconditions.checkNotNull(id, "El ID de la cita no puede ser nulo");
+        Preconditions.checkNotNull(request, "La solicitud de actualización de estado no puede ser nula");
+        Preconditions.checkNotNull(request.getEstado(), "El estado de la cita es requerido");
+
+        Cita cita = citaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Cita médica no encontrada con ID: " + id));
+
+        // 1. Validar que la cita actual no se encuentre ya en ATENDIDA o CANCELADA
+        if (cita.getEstado() == EstadoCita.ATENDIDA || cita.getEstado() == EstadoCita.CANCELADA) {
+            log.warn("Rechazo de actualización de estado: la cita [{}] ya se encuentra [{}] y no admite más transiciones",
+                    id, cita.getEstado());
+            throw new IllegalStateException("No se puede cambiar el estado de una cita que ya fue atendida o cancelada");
+        }
+
+        // 2. Parsear y validar el nuevo estado solicitado
+        EstadoCita nuevoEstado = EstadoCita.fromCodigo(request.getEstado().trim());
+
+        // 3. Validar transiciones permitidas (solo desde PROGRAMADA hacia ATENDIDA o CANCELADA)
+        if (cita.getEstado() == EstadoCita.PROGRAMADA) {
+            if (nuevoEstado != EstadoCita.ATENDIDA && nuevoEstado != EstadoCita.CANCELADA) {
+                log.warn("Transición no permitida para la cita [{}]: intento de cambio hacia [{}]", id, nuevoEstado);
+                throw new IllegalStateException("Transición de estado no permitida. Solo se permite: PROGRAMADA → ATENDIDA o PROGRAMADA → CANCELADA");
+            }
+        }
+
+        cita.setEstado(nuevoEstado);
+        Cita citaGuardada = citaRepository.save(cita);
+
+        log.info("Estado de la cita médica [{}] actualizado exitosamente a [{}] (RF-19)", id, nuevoEstado);
+
+        Mascota mascota = null;
+        if (citaGuardada.getMascotaId() != null) {
+            mascota = mascotaRepository.findById(citaGuardada.getMascotaId()).orElse(null);
+        }
+        String creadoPorEmail = null;
+        if (citaGuardada.getCreadoPor() != null) {
+            creadoPorEmail = usuarioRepository.findById(citaGuardada.getCreadoPor())
+                    .map(Usuario::getEmail)
+                    .orElse(null);
+        }
+        return mapearACitaResponse(citaGuardada, mascota, creadoPorEmail);
     }
 
     private CitaResponse mapearACitaResponse(Cita cita, Mascota masc, String creadoPorEmail) {

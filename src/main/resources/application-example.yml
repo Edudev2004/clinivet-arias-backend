@@ -71,3 +71,10 @@ logging:
     org.hibernate.SQL: WARN
   # Configuración avanzada (rotación, formato) en:
   # src/main/resources/logback-spring.xml
+
+# ── Supabase Storage (Almacenamiento Cloud) ──────────────────
+supabase:
+  url: ${SUPABASE_URL:https://<REF_SUPABASE>.supabase.co}
+  key: ${SUPABASE_KEY:<COMPLETAR_SUPABASE_SERVICE_ROLE_O_ANON_KEY>}
+  anon-key: ${SUPABASE_ANON_KEY:<COMPLETAR_SUPABASE_ANON_KEY>}
+  bucket: ${SUPABASE_BUCKET:clinivet-arias}

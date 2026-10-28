@@ -59,7 +59,7 @@ public class DataInitializer {
                         "Beckhan",
                         "Elias",
                         "veterinario@clinivet.pe",
-                        passwordEncoder.encode("Vet123!"),
+                        passwordEncoder.encode("Admin123!"),
                         rolVet,
                         true
                 );
@@ -69,7 +69,7 @@ public class DataInitializer {
                         "Lucero",
                         "Perez",
                         "recepcion@clinivet.pe",
-                        passwordEncoder.encode("Recep123!"),
+                        passwordEncoder.encode("Admin123!"),
                         rolRecep,
                         true
                 );

@@ -15,10 +15,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -321,5 +328,421 @@ class CitaServiceTest {
         assertEquals(citaId, response.getId());
         assertEquals("PROGRAMADA", response.getEstado());
         verify(citaRepository, times(1)).save(any(Cita.class));
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramación exitosa actualiza fecha y hora cuando el estado es PROGRAMADA y hay disponibilidad")
+    void reprogramarCita_DatosValidos_ActualizaFechaHoraYRetornaDetalle() {
+        // Arrange
+        LocalDateTime fechaHoraOriginal = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaExistente = new Cita(citaId, mascId, veterinarioMock, fechaHoraOriginal, EstadoCita.PROGRAMADA, "Control", adminId);
+
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        LocalDateTime nuevaFechaHora = LocalDateTime.of(nuevaFecha, nuevaHora);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaExistente));
+        when(citaRepository.existsByVeterinarioIdAndFechaHoraAndEstadoAndIdNot(vetId, nuevaFechaHora, EstadoCita.PROGRAMADA, citaId))
+                .thenReturn(false);
+        when(citaRepository.save(any(Cita.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        CitaResponse response = citaService.reprogramarCita(citaId, request);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(citaId, response.getId());
+        assertEquals(nuevaFecha, response.getFecha());
+        assertEquals(nuevaHora, response.getHora());
+        assertEquals("PROGRAMADA", response.getEstado());
+        verify(citaRepository).save(citaExistente);
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramación con conflicto de horario del veterinario lanza HorarioOcupadoException (409)")
+    void reprogramarCita_ConflictoHorarioVeterinario_LanzaHorarioOcupadoException() {
+        // Arrange
+        LocalDateTime fechaHoraOriginal = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaExistente = new Cita(citaId, mascId, veterinarioMock, fechaHoraOriginal, EstadoCita.PROGRAMADA, "Control", adminId);
+
+        LocalDate nuevaFecha = LocalDate.now().plusDays(3);
+        LocalTime nuevaHora = LocalTime.of(11, 0);
+        LocalDateTime nuevaFechaHora = LocalDateTime.of(nuevaFecha, nuevaHora);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaExistente));
+        when(citaRepository.existsByVeterinarioIdAndFechaHoraAndEstadoAndIdNot(vetId, nuevaFechaHora, EstadoCita.PROGRAMADA, citaId))
+                .thenReturn(true);
+
+        // Act & Assert
+        HorarioOcupadoException ex = assertThrows(HorarioOcupadoException.class, () ->
+                citaService.reprogramarCita(citaId, request));
+        assertEquals("El veterinario ya tiene una cita registrada en esa fecha y hora", ex.getMessage());
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramar una cita en estado CANCELADA lanza IllegalStateException (400)")
+    void reprogramarCita_CitaCancelada_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaCancelada = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.CANCELADA, "Control", adminId);
+
+        LocalDate nuevaFecha = LocalDate.now().plusDays(4);
+        LocalTime nuevaHora = LocalTime.of(10, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaCancelada));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                citaService.reprogramarCita(citaId, request));
+        assertTrue(ex.getMessage().contains("Solo se pueden reprogramar citas con estado PROGRAMADA"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramar una cita en estado ATENDIDA lanza IllegalStateException (400)")
+    void reprogramarCita_CitaAtendida_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaAtendida = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.ATENDIDA, "Control", adminId);
+
+        LocalDate nuevaFecha = LocalDate.now().plusDays(4);
+        LocalTime nuevaHora = LocalTime.of(10, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaAtendida));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                citaService.reprogramarCita(citaId, request));
+        assertTrue(ex.getMessage().contains("Solo se pueden reprogramar citas con estado PROGRAMADA"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramar a fecha u hora pasada lanza IllegalArgumentException (400)")
+    void reprogramarCita_FechaPasada_LanzaIllegalArgumentException() {
+        // Arrange
+        LocalDateTime fechaHoraOriginal = LocalDateTime.now().plusDays(2).withHour(9).withMinute(0);
+        Cita citaExistente = new Cita(citaId, mascId, veterinarioMock, fechaHoraOriginal, EstadoCita.PROGRAMADA, "Control", adminId);
+
+        LocalDate fechaPasada = LocalDate.now().minusDays(1);
+        LocalTime hora = LocalTime.of(10, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(fechaPasada, hora);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaExistente));
+
+        // Act & Assert
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                citaService.reprogramarCita(citaId, request));
+        assertTrue(ex.getMessage().contains("fecha u hora pasada"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-16: Reprogramar cita inexistente lanza ResourceNotFoundException (404)")
+    void reprogramarCita_CitaInexistente_LanzaResourceNotFoundException() {
+        when(citaRepository.findById(citaId)).thenReturn(Optional.empty());
+
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(
+                LocalDate.now().plusDays(2), LocalTime.of(10, 0));
+
+        assertThrows(ResourceNotFoundException.class, () -> citaService.reprogramarCita(citaId, request));
+    }
+
+    @Test
+    @DisplayName("RF-17 / RN-07: Cancelación exitosa actualiza el estado a CANCELADA y conserva el registro en BD (soft cancel)")
+    void cancelarCita_CitaProgramada_ActualizaEstadoACanceladaYConservaRegistro() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().plusDays(2).withHour(10).withMinute(0);
+        Cita citaProgramada = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.PROGRAMADA, "Chequeo", adminId);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaProgramada));
+        when(citaRepository.save(any(Cita.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        CitaResponse response = citaService.cancelarCita(citaId);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(citaId, response.getId());
+        assertEquals("CANCELADA", response.getEstado());
+        assertEquals(EstadoCita.CANCELADA, citaProgramada.getEstado());
+        verify(citaRepository, times(1)).save(citaProgramada);
+        verify(citaRepository, never()).delete(any(Cita.class));
+        verify(citaRepository, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("RF-17: Cancelar una cita que ya se encuentra CANCELADA lanza IllegalStateException (400)")
+    void cancelarCita_CitaYaCancelada_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().plusDays(2).withHour(10).withMinute(0);
+        Cita citaCancelada = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.CANCELADA, "Chequeo", adminId);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaCancelada));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> citaService.cancelarCita(citaId));
+        assertTrue(ex.getMessage().contains("ya se encuentra cancelada"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-17: Cancelar una cita que ya fue ATENDIDA lanza IllegalStateException (400)")
+    void cancelarCita_CitaAtendida_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fechaHora = LocalDateTime.now().minusDays(1).withHour(10).withMinute(0);
+        Cita citaAtendida = new Cita(citaId, mascId, veterinarioMock, fechaHora, EstadoCita.ATENDIDA, "Chequeo", adminId);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaAtendida));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> citaService.cancelarCita(citaId));
+        assertTrue(ex.getMessage().contains("ya fue atendida"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-17: Cancelar cita inexistente lanza ResourceNotFoundException (404)")
+    void cancelarCita_CitaInexistente_LanzaResourceNotFoundException() {
+        when(citaRepository.findById(citaId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> citaService.cancelarCita(citaId));
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas sin filtros retorna lista paginada ordenada ascendentemente por fechaHora")
+    void listarCitasConFiltros_SinFiltros_RetornaPaginaCitasOrdenadas() {
+        // Arrange
+        LocalDateTime fecha1 = LocalDateTime.now().plusDays(1).withHour(9).withMinute(0);
+        LocalDateTime fecha2 = LocalDateTime.now().plusDays(1).withHour(11).withMinute(0);
+        Cita c1 = new Cita(UUID.randomUUID(), mascId, veterinarioMock, fecha1, EstadoCita.PROGRAMADA, "Control 1", adminId);
+        Cita c2 = new Cita(UUID.randomUUID(), mascId, veterinarioMock, fecha2, EstadoCita.PROGRAMADA, "Control 2", adminId);
+
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Cita> mockPage = new PageImpl<>(List.of(c1, c2), pageable, 2);
+
+        when(citaRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        Page<CitaResponse> resultado = citaService.listarCitasConFiltros(null, null, null, null, null, pageable);
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(2, resultado.getTotalElements());
+        assertEquals(2, resultado.getContent().size());
+        assertEquals("Control 1", resultado.getContent().get(0).getMotivo());
+        assertEquals("Control 2", resultado.getContent().get(1).getMotivo());
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas filtrando por veterinarioId")
+    void listarCitasConFiltros_FiltroPorVeterinario_RetornaCitasDelVeterinario() {
+        // Arrange
+        LocalDateTime fecha = LocalDateTime.now().plusDays(2).withHour(10).withMinute(0);
+        Cita c = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Vacunación", adminId);
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Cita> mockPage = new PageImpl<>(List.of(c), pageable, 1);
+
+        when(citaRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        Page<CitaResponse> resultado = citaService.listarCitasConFiltros(vetId, null, null, null, null, pageable);
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals(vetId, resultado.getContent().get(0).getVeterinarioId());
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas filtrando por estado PROGRAMADA")
+    void listarCitasConFiltros_FiltroPorEstado_RetornaCitasConEstadoEspecifico() {
+        // Arrange
+        LocalDateTime fecha = LocalDateTime.now().plusDays(2).withHour(10).withMinute(0);
+        Cita c = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Vacunación", adminId);
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Cita> mockPage = new PageImpl<>(List.of(c), pageable, 1);
+
+        when(citaRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        Page<CitaResponse> resultado = citaService.listarCitasConFiltros(null, null, null, null, "PROGRAMADA", pageable);
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals("PROGRAMADA", resultado.getContent().get(0).getEstado());
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas combinando filtros de veterinario, rango de fechas y estado")
+    void listarCitasConFiltros_FiltrosCombinados_RetornaCitasFiltradas() {
+        // Arrange
+        LocalDate fechaInicio = LocalDate.now().plusDays(1);
+        LocalDate fechaFin = LocalDate.now().plusDays(7);
+        LocalDateTime fecha = LocalDateTime.now().plusDays(3).withHour(14).withMinute(0);
+        Cita c = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Cirugía", adminId);
+
+        Pageable pageable = PageRequest.of(0, 5);
+        Page<Cita> mockPage = new PageImpl<>(List.of(c), pageable, 1);
+
+        when(citaRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        Page<CitaResponse> resultado = citaService.listarCitasConFiltros(vetId, null, fechaInicio, fechaFin, "PROGRAMADA", pageable);
+
+        // Assert
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals("Cirugía", resultado.getContent().get(0).getMotivo());
+    }
+
+    @Test
+    @DisplayName("RF-18: Consulta de citas con estado inválido lanza IllegalArgumentException (400)")
+    void listarCitasConFiltros_EstadoInvalido_LanzaIllegalArgumentException() {
+        Pageable pageable = PageRequest.of(0, 10);
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                citaService.listarCitasConFiltros(null, null, null, null, "NO_VALIDO", pageable));
+        assertTrue(ex.getMessage().contains("Estado de cita no válido"));
+    }
+
+    @Test
+    @DisplayName("RF-19: Transición válida de PROGRAMADA a ATENDIDA actualiza el estado correctamente")
+    void actualizarEstadoCita_ProgramadaAAtendida_ActualizaEstadoExitosamente() {
+        // Arrange
+        LocalDateTime fecha = LocalDateTime.now().plusDays(1).withHour(10).withMinute(0);
+        Cita citaProgramada = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Consulta", adminId);
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("ATENDIDA");
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaProgramada));
+        when(citaRepository.save(any(Cita.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        CitaResponse response = citaService.actualizarEstadoCita(citaId, request);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(citaId, response.getId());
+        assertEquals("ATENDIDA", response.getEstado());
+        assertEquals(EstadoCita.ATENDIDA, citaProgramada.getEstado());
+        verify(citaRepository, times(1)).save(citaProgramada);
+    }
+
+    @Test
+    @DisplayName("RF-19: Transición válida de PROGRAMADA a CANCELADA actualiza el estado correctamente")
+    void actualizarEstadoCita_ProgramadaACancelada_ActualizaEstadoExitosamente() {
+        // Arrange
+        LocalDateTime fecha = LocalDateTime.now().plusDays(1).withHour(10).withMinute(0);
+        Cita citaProgramada = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Consulta", adminId);
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("CANCELADA");
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaProgramada));
+        when(citaRepository.save(any(Cita.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mascotaRepository.findById(mascId)).thenReturn(Optional.of(mascotaMock));
+        when(usuarioRepository.findById(adminId)).thenReturn(Optional.of(usuarioAdminMock));
+
+        // Act
+        CitaResponse response = citaService.actualizarEstadoCita(citaId, request);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(citaId, response.getId());
+        assertEquals("CANCELADA", response.getEstado());
+        assertEquals(EstadoCita.CANCELADA, citaProgramada.getEstado());
+        verify(citaRepository, times(1)).save(citaProgramada);
+    }
+
+    @Test
+    @DisplayName("RF-19: Intentar cambiar el estado de una cita ya ATENDIDA lanza IllegalStateException (400)")
+    void actualizarEstadoCita_CitaYaAtendida_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fecha = LocalDateTime.now().minusDays(1).withHour(10).withMinute(0);
+        Cita citaAtendida = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.ATENDIDA, "Consulta", adminId);
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("CANCELADA");
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaAtendida));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                citaService.actualizarEstadoCita(citaId, request));
+        assertTrue(ex.getMessage().contains("No se puede cambiar el estado de una cita que ya fue atendida o cancelada"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-19: Intentar cambiar el estado de una cita ya CANCELADA lanza IllegalStateException (400)")
+    void actualizarEstadoCita_CitaYaCancelada_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fecha = LocalDateTime.now().plusDays(1).withHour(10).withMinute(0);
+        Cita citaCancelada = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.CANCELADA, "Consulta", adminId);
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("ATENDIDA");
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaCancelada));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                citaService.actualizarEstadoCita(citaId, request));
+        assertTrue(ex.getMessage().contains("No se puede cambiar el estado de una cita que ya fue atendida o cancelada"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-19: Transición inválida a PROGRAMADA desde PROGRAMADA lanza IllegalStateException (400)")
+    void actualizarEstadoCita_TransicionInvalidaAProgramada_LanzaIllegalStateException() {
+        // Arrange
+        LocalDateTime fecha = LocalDateTime.now().plusDays(1).withHour(10).withMinute(0);
+        Cita citaProgramada = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Consulta", adminId);
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("PROGRAMADA");
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaProgramada));
+
+        // Act & Assert
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                citaService.actualizarEstadoCita(citaId, request));
+        assertTrue(ex.getMessage().contains("Transición de estado no permitida"));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-19: Actualizar cita con estado inexistente o inválido lanza IllegalArgumentException (400)")
+    void actualizarEstadoCita_EstadoInvalido_LanzaIllegalArgumentException() {
+        LocalDateTime fecha = LocalDateTime.now().plusDays(1).withHour(10).withMinute(0);
+        Cita citaProgramada = new Cita(citaId, mascId, veterinarioMock, fecha, EstadoCita.PROGRAMADA, "Consulta", adminId);
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("DESCONOCIDO");
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(citaProgramada));
+
+        assertThrows(IllegalArgumentException.class, () -> citaService.actualizarEstadoCita(citaId, request));
+        verify(citaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-19: Actualizar estado de cita inexistente lanza ResourceNotFoundException (404)")
+    void actualizarEstadoCita_CitaInexistente_LanzaResourceNotFoundException() {
+        when(citaRepository.findById(citaId)).thenReturn(Optional.empty());
+
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("ATENDIDA");
+
+        assertThrows(ResourceNotFoundException.class, () -> citaService.actualizarEstadoCita(citaId, request));
     }
 }

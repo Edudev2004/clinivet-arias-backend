@@ -3,6 +3,7 @@ package com.clinivet.arias.repository;
 import com.clinivet.arias.model.Cita;
 import com.clinivet.arias.model.EstadoCita;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -13,10 +14,10 @@ import java.util.UUID;
 
 /**
  * Repositorio de acceso a datos para la entidad {@link Cita}.
- * Permite validar cruces de horarios y consultar agendas (RN-03 / RF-13 / RF-14 / RF-15).
+ * Permite validar cruces de horarios, consultar agendas y filtrar citas (RN-03 / RF-13 / RF-14 / RF-15 / RF-18).
  */
 @Repository
-public interface CitaRepository extends JpaRepository<Cita, UUID> {
+public interface CitaRepository extends JpaRepository<Cita, UUID>, JpaSpecificationExecutor<Cita> {
 
     List<Cita> findByMascotaId(UUID mascotaId);
 
@@ -32,6 +33,11 @@ public interface CitaRepository extends JpaRepository<Cita, UUID> {
      * Verifica si el veterinario ya tiene una cita registrada en una fecha y hora con un estado específico.
      */
     boolean existsByVeterinarioIdAndFechaHoraAndEstado(UUID veterinarioId, LocalDateTime fechaHora, EstadoCita estado);
+
+    /**
+     * Verifica si el veterinario ya tiene otra cita registrada en esa fecha y hora distinta a la cita dada (RF-16).
+     */
+    boolean existsByVeterinarioIdAndFechaHoraAndEstadoAndIdNot(UUID veterinarioId, LocalDateTime fechaHora, EstadoCita estado, UUID id);
 
     /**
      * Retorna todas las citas activas de un veterinario dentro de una fecha específica.

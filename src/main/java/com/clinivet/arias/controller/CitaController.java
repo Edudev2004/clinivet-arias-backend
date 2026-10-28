@@ -53,6 +53,26 @@ public class CitaController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @GetMapping
+    @Operation(summary = "Listar citas médicas con filtros dinámicos y paginación",
+            description = "Consulta la lista paginada de citas médicas permitiendo filtrar opcionalmente por veterinario, fecha puntual, rango de fechas y estado (RF-18). Siempre ordenado por fecha y hora ascendente.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Listado paginado de citas obtenido exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Parámetros de búsqueda inválidos o estado no reconocido",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<org.springframework.data.domain.Page<CitaResponse>> listarCitas(
+            @RequestParam(name = "veterinarioId", required = false) UUID veterinarioId,
+            @RequestParam(name = "fecha", required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha,
+            @RequestParam(name = "fechaInicio", required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fechaInicio,
+            @RequestParam(name = "fechaFin", required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fechaFin,
+            @RequestParam(name = "estado", required = false) String estado,
+            @org.springframework.data.web.PageableDefault(size = 10) org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.domain.Page<CitaResponse> response =
+                citaService.listarCitasConFiltros(veterinarioId, fecha, fechaInicio, fechaFin, estado, pageable);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Consultar cita por identificador único (UUID)",
             description = "Retorna el detalle completo y estado de la cita médica.")
@@ -64,6 +84,58 @@ public class CitaController {
     })
     public ResponseEntity<CitaResponse> obtenerPorId(@PathVariable("id") UUID id) {
         CitaResponse response = citaService.obtenerCitaPorId(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/reprogramar")
+    @Operation(summary = "Reprogramar cita médica a nueva fecha y hora",
+            description = "Actualiza la fecha y hora de una cita en estado PROGRAMADA validando la disponibilidad de agenda del veterinario (RF-16).")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Cita médica reprogramada exitosamente",
+                    content = @Content(schema = @Schema(implementation = CitaResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Estado no válido para reprogramar o fecha pasada",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Cita no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Conflicto de horario con otra cita programada para el veterinario",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<CitaResponse> reprogramarCita(@PathVariable("id") UUID id,
+                                                        @Valid @RequestBody com.clinivet.arias.dto.CitaReprogramarRequest request) {
+        CitaResponse response = citaService.reprogramarCita(id, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/cancelar")
+    @Operation(summary = "Cancelar cita médica conservando el registro histórico",
+            description = "Cambia el estado de una cita a CANCELADA sin eliminarla de la base de datos (RF-17 / RN-07).")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Cita médica cancelada exitosamente",
+                    content = @Content(schema = @Schema(implementation = CitaResponse.class))),
+            @ApiResponse(responseCode = "400", description = "La cita ya está cancelada o atendida",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Cita no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<CitaResponse> cancelarCita(@PathVariable("id") UUID id) {
+        CitaResponse response = citaService.cancelarCita(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/estado")
+    @Operation(summary = "Actualizar estado de una cita médica",
+            description = "Transiciona el estado de una cita de PROGRAMADA hacia ATENDIDA o CANCELADA (RF-19).")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Estado de cita médica actualizado exitosamente",
+                    content = @Content(schema = @Schema(implementation = CitaResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Transición no permitida o la cita ya fue atendida/cancelada",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Cita no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<CitaResponse> actualizarEstadoCita(@PathVariable("id") UUID id,
+                                                             @Valid @RequestBody com.clinivet.arias.dto.CitaEstadoRequest request) {
+        CitaResponse response = citaService.actualizarEstadoCita(id, request);
         return ResponseEntity.ok(response);
     }
 }

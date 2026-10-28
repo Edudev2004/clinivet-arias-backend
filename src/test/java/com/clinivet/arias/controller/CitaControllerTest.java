@@ -59,6 +59,7 @@ class CitaControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(citaController)
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new org.springframework.data.web.PageableHandlerMethodArgumentResolver())
                 .build();
 
         objectMapper = new ObjectMapper();
@@ -219,5 +220,263 @@ class CitaControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.mensaje").value("El veterinario ya tiene una cita registrada en esa fecha y hora"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/reprogramar retorna 200 OK con cita reprogramada (RF-16)")
+    void reprogramarCita_PeticionValida_Retorna200Ok() throws Exception {
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+        CitaResponse response = buildSampleResponse();
+
+        when(citaService.reprogramarCita(eq(citaId), any(com.clinivet.arias.dto.CitaReprogramarRequest.class))).thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/reprogramar", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()))
+                .andExpect(jsonPath("$.estado").value("PROGRAMADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /citas/{id}/reprogramar alias de ruta retorna 200 OK (RF-16)")
+    void reprogramarCita_RutaAlias_Retorna200Ok() throws Exception {
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+        CitaResponse response = buildSampleResponse();
+
+        when(citaService.reprogramarCita(eq(citaId), any(com.clinivet.arias.dto.CitaReprogramarRequest.class))).thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/citas/{id}/reprogramar", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/reprogramar con conflicto horario retorna 409 Conflict (RF-16)")
+    void reprogramarCita_ConflictoHorario_Retorna409Conflict() throws Exception {
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaService.reprogramarCita(eq(citaId), any(com.clinivet.arias.dto.CitaReprogramarRequest.class)))
+                .thenThrow(new HorarioOcupadoException("El veterinario ya tiene una cita registrada en esa fecha y hora"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/reprogramar", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.mensaje").value("El veterinario ya tiene una cita registrada en esa fecha y hora"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/reprogramar en estado no válido retorna 400 Bad Request (RF-16)")
+    void reprogramarCita_EstadoInvalido_Retorna400BadRequest() throws Exception {
+        LocalDate nuevaFecha = LocalDate.now().plusDays(5);
+        LocalTime nuevaHora = LocalTime.of(16, 0);
+        com.clinivet.arias.dto.CitaReprogramarRequest request = new com.clinivet.arias.dto.CitaReprogramarRequest(nuevaFecha, nuevaHora);
+
+        when(citaService.reprogramarCita(eq(citaId), any(com.clinivet.arias.dto.CitaReprogramarRequest.class)))
+                .thenThrow(new IllegalStateException("Solo se pueden reprogramar citas con estado PROGRAMADA"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/reprogramar", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensaje").value("Solo se pueden reprogramar citas con estado PROGRAMADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/cancelar retorna 200 OK con estado CANCELADA (RF-17)")
+    void cancelarCita_PeticionValida_Retorna200Ok() throws Exception {
+        LocalDate fecha = LocalDate.now().plusDays(2);
+        LocalTime hora = LocalTime.of(10, 30);
+        LocalDateTime fechaHora = LocalDateTime.of(fecha, hora);
+
+        CitaResponse response = new CitaResponse(
+                citaId, mascId, "Bobby", "Canino", propId, "Carlos Mendoza", "45892314", "987123456",
+                vetId, "Beckhan Elias", "Medicina General", fecha, hora, fechaHora, "CANCELADA",
+                "Motivo", adminId, "admin@clinivet.pe", LocalDateTime.now()
+        );
+
+        when(citaService.cancelarCita(eq(citaId))).thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/cancelar", citaId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()))
+                .andExpect(jsonPath("$.estado").value("CANCELADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /citas/{id}/cancelar alias de ruta retorna 200 OK (RF-17)")
+    void cancelarCita_RutaAlias_Retorna200Ok() throws Exception {
+        LocalDate fecha = LocalDate.now().plusDays(2);
+        LocalTime hora = LocalTime.of(10, 30);
+        LocalDateTime fechaHora = LocalDateTime.of(fecha, hora);
+
+        CitaResponse response = new CitaResponse(
+                citaId, mascId, "Bobby", "Canino", propId, "Carlos Mendoza", "45892314", "987123456",
+                vetId, "Beckhan Elias", "Medicina General", fecha, hora, fechaHora, "CANCELADA",
+                "Motivo", adminId, "admin@clinivet.pe", LocalDateTime.now()
+        );
+
+        when(citaService.cancelarCita(eq(citaId))).thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/citas/{id}/cancelar", citaId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()))
+                .andExpect(jsonPath("$.estado").value("CANCELADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/cancelar con cita ya cancelada retorna 400 Bad Request (RF-17)")
+    void cancelarCita_CitaYaCancelada_Retorna400BadRequest() throws Exception {
+        when(citaService.cancelarCita(eq(citaId)))
+                .thenThrow(new IllegalStateException("La cita ya se encuentra cancelada"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/cancelar", citaId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensaje").value("La cita ya se encuentra cancelada"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/cancelar con cita ya atendida retorna 400 Bad Request (RF-17)")
+    void cancelarCita_CitaYaAtendida_Retorna400BadRequest() throws Exception {
+        when(citaService.cancelarCita(eq(citaId)))
+                .thenThrow(new IllegalStateException("No se puede cancelar una cita que ya fue atendida"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/cancelar", citaId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensaje").value("No se puede cancelar una cita que ya fue atendida"));
+    }
+
+    @Test
+    @DisplayName("GET /api/citas sin filtros retorna 200 OK con página de citas (RF-18)")
+    void listarCitas_SinFiltros_Retorna200OkConPagina() throws Exception {
+        CitaResponse c1 = buildSampleResponse();
+        org.springframework.data.domain.Page<CitaResponse> page =
+                new org.springframework.data.domain.PageImpl<>(java.util.List.of(c1), org.springframework.data.domain.PageRequest.of(0, 10), 1);
+
+        when(citaService.listarCitasConFiltros(any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        mockMvc.perform(get("/api/citas")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(citaId.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /citas alias de ruta retorna 200 OK con página de citas (RF-18)")
+    void listarCitas_RutaAlias_Retorna200OkConPagina() throws Exception {
+        CitaResponse c1 = buildSampleResponse();
+        org.springframework.data.domain.Page<CitaResponse> page =
+                new org.springframework.data.domain.PageImpl<>(java.util.List.of(c1), org.springframework.data.domain.PageRequest.of(0, 10), 1);
+
+        when(citaService.listarCitasConFiltros(any(), any(), any(), any(), any(), any())).thenReturn(page);
+
+        mockMvc.perform(get("/citas")
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(citaId.toString()));
+    }
+
+    @Test
+    @DisplayName("GET /api/citas con filtros combinados retorna 200 OK (RF-18)")
+    void listarCitas_ConFiltrosCombinados_Retorna200Ok() throws Exception {
+        CitaResponse c1 = buildSampleResponse();
+        org.springframework.data.domain.Page<CitaResponse> page =
+                new org.springframework.data.domain.PageImpl<>(java.util.List.of(c1), org.springframework.data.domain.PageRequest.of(0, 5), 1);
+
+        when(citaService.listarCitasConFiltros(eq(vetId), any(), any(), any(), eq("PROGRAMADA"), any())).thenReturn(page);
+
+        mockMvc.perform(get("/api/citas")
+                        .param("veterinarioId", vetId.toString())
+                        .param("estado", "PROGRAMADA")
+                        .param("page", "0")
+                        .param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].veterinarioId").value(vetId.toString()))
+                .andExpect(jsonPath("$.content[0].estado").value("PROGRAMADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/estado con transición válida retorna 200 OK con cita actualizada (RF-19)")
+    void actualizarEstadoCita_PeticionValida_Retorna200Ok() throws Exception {
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("ATENDIDA");
+        LocalDate fecha = LocalDate.now().plusDays(2);
+        LocalTime hora = LocalTime.of(10, 30);
+        LocalDateTime fechaHora = LocalDateTime.of(fecha, hora);
+
+        CitaResponse response = new CitaResponse(
+                citaId, mascId, "Bobby", "Canino", propId, "Carlos Mendoza", "45892314", "987123456",
+                vetId, "Beckhan Elias", "Medicina General", fecha, hora, fechaHora, "ATENDIDA",
+                "Motivo", adminId, "admin@clinivet.pe", LocalDateTime.now()
+        );
+
+        when(citaService.actualizarEstadoCita(eq(citaId), any(com.clinivet.arias.dto.CitaEstadoRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/estado", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()))
+                .andExpect(jsonPath("$.estado").value("ATENDIDA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /citas/{id}/estado alias de ruta retorna 200 OK (RF-19)")
+    void actualizarEstadoCita_RutaAlias_Retorna200Ok() throws Exception {
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("ATENDIDA");
+        CitaResponse response = buildSampleResponse();
+
+        when(citaService.actualizarEstadoCita(eq(citaId), any(com.clinivet.arias.dto.CitaEstadoRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/citas/{id}/estado", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(citaId.toString()));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/estado con transición no permitida retorna 400 Bad Request (RF-19)")
+    void actualizarEstadoCita_TransicionInvalida_Retorna400BadRequest() throws Exception {
+        com.clinivet.arias.dto.CitaEstadoRequest request = new com.clinivet.arias.dto.CitaEstadoRequest("PROGRAMADA");
+
+        when(citaService.actualizarEstadoCita(eq(citaId), any(com.clinivet.arias.dto.CitaEstadoRequest.class)))
+                .thenThrow(new IllegalStateException("Transición de estado no permitida. Solo se permite: PROGRAMADA → ATENDIDA o PROGRAMADA → CANCELADA"));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/estado", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensaje").value("Transición de estado no permitida. Solo se permite: PROGRAMADA → ATENDIDA o PROGRAMADA → CANCELADA"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/citas/{id}/estado con campo estado en blanco retorna 400 Bad Request (RF-19)")
+    void actualizarEstadoCita_EstadoEnBlanco_Retorna400BadRequest() throws Exception {
+        com.clinivet.arias.dto.CitaEstadoRequest requestInvalido = new com.clinivet.arias.dto.CitaEstadoRequest("");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/citas/{id}/estado", citaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestInvalido)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
     }
 }
