@@ -3,6 +3,7 @@ package com.clinivet.arias.controller;
 import com.clinivet.arias.config.GlobalExceptionHandler;
 import com.clinivet.arias.dto.PropietarioCreateRequest;
 import com.clinivet.arias.dto.PropietarioResponse;
+import com.clinivet.arias.dto.PropietarioUpdateRequest;
 import com.clinivet.arias.exception.DuplicateResourceException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.service.IPropietarioService;
@@ -34,6 +35,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -214,5 +216,119 @@ class PropietarioControllerTest {
         mockMvc.perform(get("/api/propietarios/{id}", noExistente))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-07: PRUEBAS DE EDICIÓN DE PROPIETARIO (PUT /api/propietarios/{id})
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("PUT /api/propietarios/{id}: Retorna 200 OK con datos actualizados (RF-07)")
+    void actualizar_retorna200() throws Exception {
+        PropietarioUpdateRequest request = new PropietarioUpdateRequest(
+                "Carlos Alberto",
+                "Mendoza Ramos",
+                "45871236",
+                "999888777",
+                "carlos.nuevo@gmail.com",
+                "Nueva Direccion 123",
+                true
+        );
+
+        PropietarioResponse responseActualizada = new PropietarioResponse(
+                PROPIETARIO_ID,
+                "Carlos Alberto",
+                "Mendoza Ramos",
+                "45871236",
+                "999888777",
+                "carlos.nuevo@gmail.com",
+                "Nueva Direccion 123",
+                true,
+                LocalDateTime.of(2026, 10, 27, 10, 0),
+                2L
+        );
+
+        when(propietarioService.actualizar(eq(PROPIETARIO_ID), any(PropietarioUpdateRequest.class)))
+                .thenReturn(responseActualizada);
+
+        mockMvc.perform(put("/api/propietarios/{id}", PROPIETARIO_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(PROPIETARIO_ID.toString()))
+                .andExpect(jsonPath("$.nombre").value("Carlos Alberto"))
+                .andExpect(jsonPath("$.telefono").value("999888777"))
+                .andExpect(jsonPath("$.email").value("carlos.nuevo@gmail.com"))
+                .andExpect(jsonPath("$.direccion").value("Nueva Direccion 123"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/propietarios/{id}: Retorna 409 Conflict si el DNI ya pertenece a otro propietario (RF-07)")
+    void actualizar_dniDuplicado_retorna409() throws Exception {
+        PropietarioUpdateRequest request = new PropietarioUpdateRequest(
+                "Carlos",
+                "Mendoza",
+                "88888888",
+                "987654321",
+                null,
+                null,
+                true
+        );
+
+        when(propietarioService.actualizar(eq(PROPIETARIO_ID), any(PropietarioUpdateRequest.class)))
+                .thenThrow(new DuplicateResourceException("El DNI 88888888 ya se encuentra registrado por otro propietario"));
+
+        mockMvc.perform(put("/api/propietarios/{id}", PROPIETARIO_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.mensaje").value("El DNI 88888888 ya se encuentra registrado por otro propietario"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/propietarios/{id}: Retorna 404 Not Found si el propietario no existe (RF-07)")
+    void actualizar_noEncontrado_retorna404() throws Exception {
+        UUID noExistente = UUID.randomUUID();
+        PropietarioUpdateRequest request = new PropietarioUpdateRequest(
+                "Carlos",
+                "Mendoza",
+                "45871236",
+                "987654321",
+                null,
+                null,
+                true
+        );
+
+        when(propietarioService.actualizar(eq(noExistente), any(PropietarioUpdateRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Propietario no encontrado con ID: " + noExistente));
+
+        mockMvc.perform(put("/api/propietarios/{id}", noExistente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("PUT /api/propietarios/{id}: Retorna 400 Bad Request si los campos obligatorios son inválidos (RF-07)")
+    void actualizar_camposInvalidos_retorna400() throws Exception {
+        PropietarioUpdateRequest requestInvalido = new PropietarioUpdateRequest(
+                "", // nombre vacío
+                "Mendoza",
+                "123", // DNI muy corto
+                "", // teléfono vacío
+                "email-no-valido",
+                null,
+                true
+        );
+
+        mockMvc.perform(put("/api/propietarios/{id}", PROPIETARIO_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestInvalido)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"));
     }
 }

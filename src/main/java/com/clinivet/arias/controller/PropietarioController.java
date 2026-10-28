@@ -80,4 +80,24 @@ public class PropietarioController {
         PropietarioResponse response = propietarioService.obtenerPorId(id);
         return ResponseEntity.ok(response);
     }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Actualizar datos de propietario (RF-07)",
+            description = "Modifica los datos del propietario. Si cambia el DNI, valida que no pertenezca a otro propietario.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Propietario actualizado exitosamente",
+                    content = @Content(schema = @Schema(implementation = PropietarioResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos o incompletos",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Propietario no encontrado con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Conflicto: El DNI nuevo ya está registrado por otro propietario",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<PropietarioResponse> actualizar(
+            @PathVariable UUID id,
+            @Valid @RequestBody com.clinivet.arias.dto.PropietarioUpdateRequest request) {
+        PropietarioResponse response = propietarioService.actualizar(id, request);
+        return ResponseEntity.ok(response);
+    }
 }
