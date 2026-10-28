@@ -80,7 +80,7 @@ public class SecurityConfig {
                         .hasAnyRole("ADMINISTRADOR", "ENCARGADO_INVENTARIO")
 
                         // Endpoints de Citas, Propietarios, Mascotas, Veterinarios y Almacenamiento (Admin, Recepción y Veterinario)
-                        .requestMatchers("/api/citas/**", "/api/propietarios/**", "/api/mascotas/**", "/api/veterinarios/**", "/api/storage/**", "/storage/**")
+                        .requestMatchers("/api/citas/**", "/citas/**", "/api/propietarios/**", "/propietarios/**", "/api/mascotas/**", "/mascotas/**", "/api/veterinarios/**", "/api/storage/**", "/storage/**")
                         .hasAnyRole("ADMINISTRADOR", "RECEPCIONISTA", "VETERINARIO")
 
                         // Cualquier otra petición requiere token válido
