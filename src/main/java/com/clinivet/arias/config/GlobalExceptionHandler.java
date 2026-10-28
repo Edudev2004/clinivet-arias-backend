@@ -1,6 +1,11 @@
 package com.clinivet.arias.config;
 
 import com.clinivet.arias.dto.ApiErrorResponse;
+import com.clinivet.arias.exception.ConsultaDuplicadaException;
+import com.clinivet.arias.exception.DiagnosticoDuplicadoException;
+import com.clinivet.arias.exception.DuplicateResourceException;
+import com.clinivet.arias.exception.HorarioOcupadoException;
+import com.clinivet.arias.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,8 +16,10 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.stream.Collectors;
 
@@ -74,8 +81,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
-    @ExceptionHandler(com.clinivet.arias.exception.ResourceNotFoundException.class)
-    public ResponseEntity<ApiErrorResponse> handleResourceNotFound(com.clinivet.arias.exception.ResourceNotFoundException ex, HttpServletRequest request) {
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
         ApiErrorResponse error = new ApiErrorResponse(
                 HttpStatus.NOT_FOUND.value(),
                 HttpStatus.NOT_FOUND.getReasonPhrase(),
@@ -85,8 +92,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
-    @ExceptionHandler(com.clinivet.arias.exception.HorarioOcupadoException.class)
-    public ResponseEntity<ApiErrorResponse> handleHorarioOcupado(com.clinivet.arias.exception.HorarioOcupadoException ex, HttpServletRequest request) {
+    @ExceptionHandler(HorarioOcupadoException.class)
+    public ResponseEntity<ApiErrorResponse> handleHorarioOcupado(HorarioOcupadoException ex, HttpServletRequest request) {
         ApiErrorResponse error = new ApiErrorResponse(
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
@@ -96,8 +103,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
-    @ExceptionHandler({com.clinivet.arias.exception.ConsultaDuplicadaException.class, com.clinivet.arias.exception.DiagnosticoDuplicadoException.class})
-    public ResponseEntity<ApiErrorResponse> handleConsultaDuplicada(RuntimeException ex, HttpServletRequest request) {
+    @ExceptionHandler(ConsultaDuplicadaException.class)
+    public ResponseEntity<ApiErrorResponse> handleConsultaDuplicada(ConsultaDuplicadaException ex, HttpServletRequest request) {
         ApiErrorResponse error = new ApiErrorResponse(
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
@@ -107,8 +114,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
-    @ExceptionHandler(com.clinivet.arias.exception.DuplicateResourceException.class)
-    public ResponseEntity<ApiErrorResponse> handleDuplicateResource(com.clinivet.arias.exception.DuplicateResourceException ex, HttpServletRequest request) {
+    @ExceptionHandler(DiagnosticoDuplicadoException.class)
+    public ResponseEntity<ApiErrorResponse> handleDiagnosticoDuplicado(DiagnosticoDuplicadoException ex, HttpServletRequest request) {
         ApiErrorResponse error = new ApiErrorResponse(
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
@@ -118,8 +125,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
-    @ExceptionHandler(org.springframework.web.bind.MissingServletRequestParameterException.class)
-    public ResponseEntity<ApiErrorResponse> handleMissingParameter(org.springframework.web.bind.MissingServletRequestParameterException ex, HttpServletRequest request) {
+    @ExceptionHandler(DuplicateResourceException.class)
+    public ResponseEntity<ApiErrorResponse> handleDuplicateResource(DuplicateResourceException ex, HttpServletRequest request) {
+        ApiErrorResponse error = new ApiErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingParameter(MissingServletRequestParameterException ex, HttpServletRequest request) {
         String mensaje = String.format("El parámetro requerido '%s' no fue proporcionado en la solicitud", ex.getParameterName());
         ApiErrorResponse error = new ApiErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),
@@ -130,8 +148,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
-    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ApiErrorResponse> handleTypeMismatch(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
         String mensaje = String.format("El valor proporcionado para el parámetro '%s' tiene un formato inválido", ex.getName());
         ApiErrorResponse error = new ApiErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),

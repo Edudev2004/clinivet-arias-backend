@@ -4,8 +4,11 @@ import com.clinivet.arias.config.GlobalExceptionHandler;
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.MascotaUpdateRequest;
+import com.clinivet.arias.dto.VacunaAplicadaRequest;
+import com.clinivet.arias.dto.VacunaAplicadaResponse;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.service.IMascotaService;
+import com.clinivet.arias.service.IVacunaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -42,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - RF-09: Registro exitoso (201), validación de campos obligatorios (400) y propietario inexistente (400 / RN-01).
  * - RF-10: Consulta de ficha completa (200, 404).
  * - RF-11: Edición de datos de mascota (200, 400, 404).
+ * - RF-24: Registro y consulta de vacunas aplicadas (201, 400, 404, 200).
  */
 @ExtendWith(MockitoExtension.class)
 class MascotaControllerTest {
@@ -50,6 +54,9 @@ class MascotaControllerTest {
 
     @Mock
     private IMascotaService mascotaService;
+
+    @Mock
+    private IVacunaService vacunaService;
 
     @InjectMocks
     private MascotaController mascotaController;
@@ -316,5 +323,116 @@ class MascotaControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.error").value("Bad Request"));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-24: PRUEBAS DE REGISTRO Y CONSULTA DE VACUNAS APLICADAS (POST y GET /api/mascotas/{id}/vacunas)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("POST /api/mascotas/{id}/vacunas: Retorna 201 Created cuando se registra una vacuna exitosamente (RF-24)")
+    void registrarVacuna_exitoso_retorna201() throws Exception {
+        UUID vacunaId = UUID.randomUUID();
+        UUID veterinarioId = UUID.randomUUID();
+        VacunaAplicadaRequest request = new VacunaAplicadaRequest(
+                "Séxtuple Canina",
+                LocalDate.of(2026, 10, 28),
+                LocalDate.of(2027, 10, 28),
+                veterinarioId,
+                "LOT-2026-X1"
+        );
+
+        VacunaAplicadaResponse response = new VacunaAplicadaResponse(
+                vacunaId,
+                MASCOTA_ID,
+                "Firulais",
+                UUID.randomUUID(),
+                "Séxtuple Canina",
+                LocalDate.of(2026, 10, 28),
+                LocalDate.of(2027, 10, 28),
+                veterinarioId,
+                "Patricia Gómez",
+                "LOT-2026-X1",
+                null,
+                LocalDateTime.now()
+        );
+
+        when(vacunaService.registrarVacuna(eq(MASCOTA_ID), any(VacunaAplicadaRequest.class)))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/mascotas/{id}/vacunas", MASCOTA_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(vacunaId.toString()))
+                .andExpect(jsonPath("$.mascotaId").value(MASCOTA_ID.toString()))
+                .andExpect(jsonPath("$.nombreVacuna").value("Séxtuple Canina"))
+                .andExpect(jsonPath("$.lote").value("LOT-2026-X1"));
+    }
+
+    @Test
+    @DisplayName("POST /api/mascotas/{id}/vacunas: Retorna 400 Bad Request cuando faltan campos obligatorios (RF-24)")
+    void registrarVacuna_camposFaltantes_retorna400() throws Exception {
+        VacunaAplicadaRequest requestInvalido = new VacunaAplicadaRequest(
+                "", // nombre en blanco
+                null, // fecha nula
+                null,
+                null, // veterinario nulo
+                null
+        );
+
+        mockMvc.perform(post("/api/mascotas/{id}/vacunas", MASCOTA_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestInvalido)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    @DisplayName("POST /api/mascotas/{id}/vacunas: Retorna 404 Not Found cuando la mascota no existe (RF-24)")
+    void registrarVacuna_mascotaNoExiste_retorna404() throws Exception {
+        UUID inexistente = UUID.randomUUID();
+        UUID veterinarioId = UUID.randomUUID();
+        VacunaAplicadaRequest request = new VacunaAplicadaRequest(
+                "Antirrábica",
+                LocalDate.now(),
+                null,
+                veterinarioId,
+                null
+        );
+
+        when(vacunaService.registrarVacuna(eq(inexistente), any(VacunaAplicadaRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Mascota no encontrada con ID: " + inexistente));
+
+        mockMvc.perform(post("/api/mascotas/{id}/vacunas", inexistente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("GET /api/mascotas/{id}/vacunas: Retorna 200 OK con el historial de vacunas (RF-24)")
+    void listarVacunas_retorna200() throws Exception {
+        VacunaAplicadaResponse response = new VacunaAplicadaResponse(
+                UUID.randomUUID(),
+                MASCOTA_ID,
+                "Firulais",
+                UUID.randomUUID(),
+                "Séxtuple Canina",
+                LocalDate.of(2026, 10, 28),
+                null,
+                UUID.randomUUID(),
+                "Patricia Gómez",
+                null,
+                null,
+                LocalDateTime.now()
+        );
+
+        when(vacunaService.listarPorMascota(MASCOTA_ID)).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/mascotas/{id}/vacunas", MASCOTA_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].nombreVacuna").value("Séxtuple Canina"));
     }
 }
