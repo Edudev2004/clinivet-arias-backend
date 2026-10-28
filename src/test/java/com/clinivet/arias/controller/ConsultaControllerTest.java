@@ -3,7 +3,10 @@ package com.clinivet.arias.controller;
 import com.clinivet.arias.config.GlobalExceptionHandler;
 import com.clinivet.arias.dto.ConsultaRequest;
 import com.clinivet.arias.dto.ConsultaResponse;
+import com.clinivet.arias.dto.DiagnosticoRequest;
+import com.clinivet.arias.dto.DiagnosticoResponse;
 import com.clinivet.arias.exception.ConsultaDuplicadaException;
+import com.clinivet.arias.exception.DiagnosticoDuplicadoException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.service.IConsultaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +29,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -127,6 +131,76 @@ class ConsultaControllerTest {
         mockMvc.perform(post("/api/consultas")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(requestValido())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-21: PRUEBAS DE ENDPOINT POST /api/consultas/{id}/diagnostico
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("POST /api/consultas/{id}/diagnostico retorna 201 Created con el diagnóstico registrado")
+    void registrarDiagnostico_Retorna201() throws Exception {
+        DiagnosticoResponse response = new DiagnosticoResponse(
+                consultaId,
+                "Gastroenteritis aguda",
+                "K52.9",
+                LocalDateTime.now()
+        );
+        when(consultaService.registrarDiagnostico(eq(consultaId), any(DiagnosticoRequest.class)))
+                .thenReturn(response);
+
+        DiagnosticoRequest request = new DiagnosticoRequest("Gastroenteritis aguda", "K52.9");
+
+        mockMvc.perform(post("/api/consultas/{id}/diagnostico", consultaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.consultaId").value(consultaId.toString()))
+                .andExpect(jsonPath("$.descripcion").value("Gastroenteritis aguda"))
+                .andExpect(jsonPath("$.codigoCIE").value("K52.9"));
+    }
+
+    @Test
+    @DisplayName("POST /api/consultas/{id}/diagnostico retorna 400 Bad Request cuando la descripción está en blanco")
+    void registrarDiagnostico_DescripcionVacia_Retorna400() throws Exception {
+        DiagnosticoRequest requestInvalido = new DiagnosticoRequest("", null);
+
+        mockMvc.perform(post("/api/consultas/{id}/diagnostico", consultaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestInvalido)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    @DisplayName("POST /api/consultas/{id}/diagnostico retorna 404 Not Found cuando la consulta no existe")
+    void registrarDiagnostico_ConsultaNoExiste_Retorna404() throws Exception {
+        UUID inexistente = UUID.randomUUID();
+        when(consultaService.registrarDiagnostico(eq(inexistente), any(DiagnosticoRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Consulta médica no encontrada con ID: " + inexistente));
+
+        DiagnosticoRequest request = new DiagnosticoRequest("Diagnóstico válido", null);
+
+        mockMvc.perform(post("/api/consultas/{id}/diagnostico", inexistente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("POST /api/consultas/{id}/diagnostico retorna 409 Conflict cuando ya existe un diagnóstico registrado")
+    void registrarDiagnostico_Duplicado_Retorna409() throws Exception {
+        when(consultaService.registrarDiagnostico(eq(consultaId), any(DiagnosticoRequest.class)))
+                .thenThrow(new DiagnosticoDuplicadoException("La consulta ya tiene un diagnóstico registrado"));
+
+        DiagnosticoRequest request = new DiagnosticoRequest("Diagnóstico duplicado", null);
+
+        mockMvc.perform(post("/api/consultas/{id}/diagnostico", consultaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409));
     }
