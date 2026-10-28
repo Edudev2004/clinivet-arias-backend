@@ -96,6 +96,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
+    @ExceptionHandler(com.clinivet.arias.exception.ConsultaDuplicadaException.class)
+    public ResponseEntity<ApiErrorResponse> handleConsultaDuplicada(com.clinivet.arias.exception.ConsultaDuplicadaException ex, HttpServletRequest request) {
+        ApiErrorResponse error = new ApiErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
     @ExceptionHandler(com.clinivet.arias.exception.DuplicateResourceException.class)
     public ResponseEntity<ApiErrorResponse> handleDuplicateResource(com.clinivet.arias.exception.DuplicateResourceException ex, HttpServletRequest request) {
         ApiErrorResponse error = new ApiErrorResponse(

@@ -20,6 +20,8 @@ public interface ConsultaRepository extends JpaRepository<Consulta, UUID> {
 
     Optional<Consulta> findByCitaId(UUID citaId);
 
+    boolean existsByCitaId(UUID citaId);
+
     @Query("""
         SELECT c.pesoKg FROM Consulta c, Cita ci
         WHERE c.citaId = ci.id
