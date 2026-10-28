@@ -96,8 +96,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
-    @ExceptionHandler(com.clinivet.arias.exception.ConsultaDuplicadaException.class)
-    public ResponseEntity<ApiErrorResponse> handleConsultaDuplicada(com.clinivet.arias.exception.ConsultaDuplicadaException ex, HttpServletRequest request) {
+    @ExceptionHandler({com.clinivet.arias.exception.ConsultaDuplicadaException.class, com.clinivet.arias.exception.DiagnosticoDuplicadoException.class})
+    public ResponseEntity<ApiErrorResponse> handleConsultaDuplicada(RuntimeException ex, HttpServletRequest request) {
         ApiErrorResponse error = new ApiErrorResponse(
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
