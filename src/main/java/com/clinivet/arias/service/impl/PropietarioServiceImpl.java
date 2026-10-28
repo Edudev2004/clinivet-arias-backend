@@ -127,6 +127,56 @@ public class PropietarioServiceImpl implements IPropietarioService {
         return resultados.map(this::mapearAResponse);
     }
 
+    @Override
+    @Transactional
+    public PropietarioResponse actualizar(UUID id, com.clinivet.arias.dto.PropietarioUpdateRequest request) {
+        Preconditions.checkNotNull(id, "El identificador del propietario no puede ser nulo");
+        Preconditions.checkNotNull(request, "La solicitud de actualización no puede ser nula");
+        Preconditions.checkNotNull(request.getDni(), "El DNI del propietario no puede ser nulo");
+        Preconditions.checkNotNull(request.getNombre(), "El nombre del propietario no puede ser nulo");
+        Preconditions.checkNotNull(request.getApellido(), "El apellido del propietario no puede ser nulo");
+
+        String dni = StringUtils.trim(request.getDni());
+        String nombre = StringUtils.trim(request.getNombre());
+        String apellido = StringUtils.trim(request.getApellido());
+        String telefono = StringUtils.trim(request.getTelefono());
+        String email = StringUtils.trimToNull(request.getEmail());
+        String direccion = StringUtils.trimToNull(request.getDireccion());
+
+        log.info("Iniciando actualización de datos para propietario [{}] con DNI [{}] (RF-07)", id, dni);
+
+        // 1. Verificar existencia del propietario (404 si no existe)
+        Propietario propietario = propietarioRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Propietario no encontrado con ID: " + id));
+
+        // 2. Si el DNI cambió, validar que no esté en uso por otro propietario (409 si duplicado)
+        if (!dni.equalsIgnoreCase(propietario.getDni())) {
+            Optional<Propietario> existenteConDni = propietarioRepository.findByDni(dni);
+            if (existenteConDni.isPresent() && !existenteConDni.get().getId().equals(id)) {
+                log.warn("Rechazo de actualización: el DNI [{}] ya se encuentra registrado por otro propietario [{}]",
+                        dni, existenteConDni.get().getId());
+                throw new DuplicateResourceException("El DNI " + dni + " ya se encuentra registrado por otro propietario");
+            }
+        }
+
+        // 3. Actualizar campos
+        propietario.setNombre(nombre);
+        propietario.setApellido(apellido);
+        propietario.setDni(dni);
+        propietario.setTelefono(telefono);
+        propietario.setEmail(email);
+        propietario.setDireccion(direccion);
+        if (request.getActivo() != null) {
+            propietario.setActivo(request.getActivo());
+        }
+
+        Propietario actualizado = propietarioRepository.save(propietario);
+        log.info("Propietario [{} {}] actualizado exitosamente con ID [{}] (RF-07)",
+                actualizado.getNombre(), actualizado.getApellido(), id);
+
+        return mapearAResponse(actualizado);
+    }
+
     private PropietarioResponse mapearAResponse(Propietario p) {
         long cantidadMascotas = 0L;
         if (p.getId() != null && mascotaRepository != null) {

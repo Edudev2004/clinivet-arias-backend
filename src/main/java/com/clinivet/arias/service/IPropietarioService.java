@@ -36,4 +36,13 @@ public interface IPropietarioService {
      * @return página con resultados encontrados (lista vacía si no hay coincidencias)
      */
     org.springframework.data.domain.Page<PropietarioResponse> buscar(String termino, org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * Actualiza los datos de un propietario existente validando que el DNI no pertenezca a otro propietario (RF-07).
+     *
+     * @param id identificador del propietario
+     * @param request datos a actualizar
+     * @return datos actualizados del propietario
+     */
+    PropietarioResponse actualizar(UUID id, com.clinivet.arias.dto.PropietarioUpdateRequest request);
 }

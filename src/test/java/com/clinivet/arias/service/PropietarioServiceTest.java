@@ -2,6 +2,7 @@ package com.clinivet.arias.service;
 
 import com.clinivet.arias.dto.PropietarioCreateRequest;
 import com.clinivet.arias.dto.PropietarioResponse;
+import com.clinivet.arias.dto.PropietarioUpdateRequest;
 import com.clinivet.arias.exception.DuplicateResourceException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.model.Propietario;
@@ -259,5 +260,144 @@ class PropietarioServiceTest {
         assertNotNull(resultado);
         assertEquals(0, resultado.getTotalElements());
         assertTrue(resultado.getContent().isEmpty());
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-07: PRUEBAS DE ACTUALIZACIÓN DE DATOS DE PROPIETARIO
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("RF-07.1: Debe actualizar exitosamente los datos del propietario manteniendo el mismo DNI")
+    void actualizar_mismoDni_exitoso() {
+        PropietarioUpdateRequest updateRequest = new PropietarioUpdateRequest(
+                "Carlos Alberto",
+                "Mendoza Ramos",
+                "45871236", // Mismo DNI
+                "999888777",
+                "carlos.nuevo@gmail.com",
+                "Nueva Direccion 123",
+                true
+        );
+
+        when(propietarioRepository.findById(PROPIETARIO_ID)).thenReturn(Optional.of(propietarioPersistido));
+        when(propietarioRepository.save(any(Propietario.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mascotaRepository.countByPropietarioIdAndActivoTrue(PROPIETARIO_ID)).thenReturn(1L);
+
+        PropietarioResponse response = propietarioService.actualizar(PROPIETARIO_ID, updateRequest);
+
+        assertNotNull(response);
+        assertEquals(PROPIETARIO_ID, response.getId());
+        assertEquals("Carlos Alberto", response.getNombre());
+        assertEquals("999888777", response.getTelefono());
+        assertEquals("carlos.nuevo@gmail.com", response.getEmail());
+        assertEquals("Nueva Direccion 123", response.getDireccion());
+        assertEquals("45871236", response.getDni());
+        assertEquals(1L, response.getCantidadMascotas());
+
+        verify(propietarioRepository, times(1)).findById(PROPIETARIO_ID);
+        verify(propietarioRepository, never()).findByDni(anyString());
+        verify(propietarioRepository, times(1)).save(any(Propietario.class));
+    }
+
+    @Test
+    @DisplayName("RF-07.2: Debe actualizar exitosamente cuando el DNI cambia a uno disponible")
+    void actualizar_nuevoDniDisponible_exitoso() {
+        PropietarioUpdateRequest updateRequest = new PropietarioUpdateRequest(
+                "Carlos",
+                "Mendoza",
+                "77889900", // Nuevo DNI
+                "987654321",
+                "carlos@gmail.com",
+                "Av. Universitaria 1240",
+                true
+        );
+
+        when(propietarioRepository.findById(PROPIETARIO_ID)).thenReturn(Optional.of(propietarioPersistido));
+        when(propietarioRepository.findByDni("77889900")).thenReturn(Optional.empty());
+        when(propietarioRepository.save(any(Propietario.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PropietarioResponse response = propietarioService.actualizar(PROPIETARIO_ID, updateRequest);
+
+        assertNotNull(response);
+        assertEquals("77889900", response.getDni());
+        verify(propietarioRepository, times(1)).findByDni("77889900");
+        verify(propietarioRepository, times(1)).save(any(Propietario.class));
+    }
+
+    @Test
+    @DisplayName("RF-07.3: Debe rechazar con DuplicateResourceException (409) si el nuevo DNI ya pertenece a otro propietario")
+    void actualizar_dniDeOtroPropietario_lanzaConflicto() {
+        UUID otroId = UUID.fromString("e0000000-0000-0000-0000-000000000002");
+        Propietario otroPropietario = new Propietario();
+        otroPropietario.setId(otroId);
+        otroPropietario.setDni("88888888");
+
+        PropietarioUpdateRequest updateRequest = new PropietarioUpdateRequest(
+                "Carlos",
+                "Mendoza",
+                "88888888",
+                "987654321",
+                null,
+                null,
+                true
+        );
+
+        when(propietarioRepository.findById(PROPIETARIO_ID)).thenReturn(Optional.of(propietarioPersistido));
+        when(propietarioRepository.findByDni("88888888")).thenReturn(Optional.of(otroPropietario));
+
+        DuplicateResourceException ex = assertThrows(
+                DuplicateResourceException.class,
+                () -> propietarioService.actualizar(PROPIETARIO_ID, updateRequest)
+        );
+
+        assertTrue(ex.getMessage().contains("88888888"));
+        verify(propietarioRepository, never()).save(any(Propietario.class));
+    }
+
+    @Test
+    @DisplayName("RF-07.4: Debe lanzar ResourceNotFoundException (404) si el propietario no existe")
+    void actualizar_propietarioNoEncontrado_lanzaNotFound() {
+        UUID noExistente = UUID.randomUUID();
+        PropietarioUpdateRequest updateRequest = new PropietarioUpdateRequest(
+                "Carlos",
+                "Mendoza",
+                "45871236",
+                "987654321",
+                null,
+                null,
+                true
+        );
+
+        when(propietarioRepository.findById(noExistente)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> propietarioService.actualizar(noExistente, updateRequest));
+        verify(propietarioRepository, never()).save(any(Propietario.class));
+    }
+
+    @Test
+    @DisplayName("RF-07.5: Debe aplicar trim a los datos de actualización")
+    void actualizar_aplicaTrimming() {
+        PropietarioUpdateRequest updateRequest = new PropietarioUpdateRequest(
+                "  Carlos Alberto  ",
+                "  Mendoza Ramos  ",
+                "  45871236  ",
+                "  999888777  ",
+                "  carlos@gmail.com  ",
+                "  Av. Universitaria  ",
+                true
+        );
+
+        when(propietarioRepository.findById(PROPIETARIO_ID)).thenReturn(Optional.of(propietarioPersistido));
+        when(propietarioRepository.save(any(Propietario.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PropietarioResponse response = propietarioService.actualizar(PROPIETARIO_ID, updateRequest);
+
+        assertNotNull(response);
+        assertEquals("Carlos Alberto", response.getNombre());
+        assertEquals("Mendoza Ramos", response.getApellido());
+        assertEquals("45871236", response.getDni());
+        assertEquals("999888777", response.getTelefono());
+        assertEquals("carlos@gmail.com", response.getEmail());
+        assertEquals("Av. Universitaria", response.getDireccion());
     }
 }
