@@ -2,6 +2,7 @@ package com.clinivet.arias.service;
 
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
+import com.clinivet.arias.dto.MascotaUpdateRequest;
 
 import java.util.UUID;
 
@@ -29,4 +30,15 @@ public interface IMascotaService {
      * @return ficha completa de la mascota con datos del propietario vinculado
      */
     MascotaResponse obtenerPorId(UUID id);
+
+    /**
+     * Actualiza los datos de una mascota registrada (RF-11).
+     * El vínculo con el propietario original es permanente y no puede ser modificado.
+     * Si la mascota no existe, lanza ResourceNotFoundException (404).
+     *
+     * @param id identificador único de la mascota a actualizar
+     * @param request datos modificados de la mascota
+     * @return respuesta con los datos actualizados de la mascota
+     */
+    MascotaResponse actualizar(UUID id, MascotaUpdateRequest request);
 }

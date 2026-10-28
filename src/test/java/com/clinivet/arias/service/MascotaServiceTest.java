@@ -2,6 +2,7 @@ package com.clinivet.arias.service;
 
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
+import com.clinivet.arias.dto.MascotaUpdateRequest;
 import com.clinivet.arias.model.Mascota;
 import com.clinivet.arias.model.Propietario;
 import com.clinivet.arias.repository.MascotaRepository;
@@ -32,6 +33,8 @@ import static org.mockito.Mockito.*;
  * Pruebas unitarias para {@link MascotaServiceImpl} con Mockito.
  * Valida los criterios de aceptación de:
  * - RF-09: Registro de mascotas asociadas a propietario (RN-01).
+ * - RF-10: Ficha completa de la mascota con peso de consultas médicas.
+ * - RF-11: Edición de datos de mascota manteniendo vínculo permanente con propietario.
  */
 @ExtendWith(MockitoExtension.class)
 class MascotaServiceTest {
@@ -261,5 +264,125 @@ class MascotaServiceTest {
 
         verify(mascotaRepository, times(1)).findById(inexistente);
         verify(consultaRepository, never()).findPesosRecientesPorMascotaId(any());
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-11: PRUEBAS DE EDICIÓN DE MASCOTA
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("RF-11.1: Debe actualizar exitosamente los datos de la mascota manteniendo permanente el vínculo del propietario")
+    void actualizar_exitoso_mantienePropietarioPermanente() {
+        Mascota mascotaExistente = new Mascota(
+                MASCOTA_ID,
+                propietarioExistente,
+                "Firulais",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("28.50"),
+                true
+        );
+
+        MascotaUpdateRequest updateRequest = new MascotaUpdateRequest(
+                "Firulais Editado",
+                "Canino",
+                "Golden Retriever Puro",
+                "Dorado Oscuro",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("29.90"),
+                "https://fotos.com/firulais_nuevo.jpg",
+                true
+        );
+
+        when(mascotaRepository.findById(MASCOTA_ID)).thenReturn(Optional.of(mascotaExistente));
+        when(mascotaRepository.save(any(Mascota.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MascotaResponse response = mascotaService.actualizar(MASCOTA_ID, updateRequest);
+
+        assertNotNull(response);
+        assertEquals(MASCOTA_ID, response.getId());
+        assertEquals("Firulais Editado", response.getNombre());
+        assertEquals("Golden Retriever Puro", response.getRaza());
+        assertEquals("Dorado Oscuro", response.getColor());
+        assertEquals(new BigDecimal("29.90"), response.getPesoActualKg());
+        assertEquals("https://fotos.com/firulais_nuevo.jpg", response.getFotoUrl());
+
+        // Verificar criterio de aceptación estricto: Vínculo permanente con el propietario original
+        assertEquals(PROPIETARIO_ID, response.getPropietarioId(), "El propietario no debe cambiar");
+        assertEquals("Carlos Mendoza Ramos", response.getPropietarioNombre());
+
+        verify(mascotaRepository, times(1)).findById(MASCOTA_ID);
+        verify(mascotaRepository, times(1)).save(mascotaExistente);
+    }
+
+    @Test
+    @DisplayName("RF-11.2: Debe lanzar ResourceNotFoundException (404) cuando la mascota a actualizar no existe")
+    void actualizar_mascotaInexistente_lanzaNotFound() {
+        UUID inexistente = UUID.randomUUID();
+        MascotaUpdateRequest updateRequest = new MascotaUpdateRequest(
+                "Milo",
+                "Felino",
+                "Siamés",
+                "Blanco y Cafe",
+                "Macho",
+                null,
+                new BigDecimal("4.20"),
+                null,
+                true
+        );
+
+        when(mascotaRepository.findById(inexistente)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> mascotaService.actualizar(inexistente, updateRequest));
+
+        verify(mascotaRepository, times(1)).findById(inexistente);
+        verify(mascotaRepository, never()).save(any(Mascota.class));
+    }
+
+    @Test
+    @DisplayName("RF-11.3: Debe aplicar trimming y normalizar sexo al actualizar")
+    void actualizar_conEspaciosYNormalizacion_aplicaFormato() {
+        Mascota mascotaExistente = new Mascota(
+                MASCOTA_ID,
+                propietarioExistente,
+                "Luna",
+                "Felino",
+                "Comun",
+                "Negro",
+                "Hembra",
+                LocalDate.of(2021, 5, 20),
+                new BigDecimal("3.50"),
+                true
+        );
+
+        MascotaUpdateRequest updateRequest = new MascotaUpdateRequest(
+                "  Luna Actualizada  ",
+                "  Felino  ",
+                "  Angora  ",
+                "  Gris  ",
+                "H",
+                LocalDate.of(2021, 5, 20),
+                new BigDecimal("3.80"),
+                "  https://fotos.com/luna.jpg  ",
+                false
+        );
+
+        when(mascotaRepository.findById(MASCOTA_ID)).thenReturn(Optional.of(mascotaExistente));
+        when(mascotaRepository.save(any(Mascota.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MascotaResponse response = mascotaService.actualizar(MASCOTA_ID, updateRequest);
+
+        assertNotNull(response);
+        assertEquals("Luna Actualizada", response.getNombre());
+        assertEquals("Felino", response.getEspecie());
+        assertEquals("Angora", response.getRaza());
+        assertEquals("Gris", response.getColor());
+        assertEquals("Hembra", response.getSexo());
+        assertEquals("https://fotos.com/luna.jpg", response.getFotoUrl());
+        assertFalse(response.getActivo());
     }
 }
