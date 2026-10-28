@@ -3,6 +3,7 @@ package com.clinivet.arias.controller;
 import com.clinivet.arias.dto.ApiErrorResponse;
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
+import com.clinivet.arias.dto.MascotaUpdateRequest;
 import com.clinivet.arias.service.IMascotaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -59,6 +60,24 @@ public class MascotaController {
     })
     public ResponseEntity<MascotaResponse> obtenerPorId(@PathVariable UUID id) {
         MascotaResponse response = mascotaService.obtenerPorId(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Actualizar datos de una mascota (RF-11)",
+            description = "Modifica los datos de una mascota registrada manteniendo el vínculo permanente con su propietario original.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Mascota actualizada exitosamente",
+                    content = @Content(schema = @Schema(implementation = MascotaResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Mascota no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<MascotaResponse> actualizar(
+            @PathVariable UUID id,
+            @Valid @RequestBody MascotaUpdateRequest request) {
+        MascotaResponse response = mascotaService.actualizar(id, request);
         return ResponseEntity.ok(response);
     }
 }

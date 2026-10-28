@@ -3,6 +3,7 @@ package com.clinivet.arias.controller;
 import com.clinivet.arias.config.GlobalExceptionHandler;
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
+import com.clinivet.arias.dto.MascotaUpdateRequest;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.service.IMascotaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,9 +27,11 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -36,6 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Pruebas unitarias de capa Web para {@link MascotaController} con MockMvc.
  * Valida códigos HTTP y serialización JSON para:
  * - RF-09: Registro exitoso (201), validación de campos obligatorios (400) y propietario inexistente (400 / RN-01).
+ * - RF-10: Consulta de ficha completa (200, 404).
+ * - RF-11: Edición de datos de mascota (200, 400, 404).
  */
 @ExtendWith(MockitoExtension.class)
 class MascotaControllerTest {
@@ -198,5 +203,105 @@ class MascotaControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.mensaje").value("Mascota no encontrada con ID: " + inexistente));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-11: PRUEBAS DE ACTUALIZACIÓN DE MASCOTA (PUT /api/mascotas/{id})
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("PUT /api/mascotas/{id}: Retorna 200 OK cuando los datos son válidos y la mascota existe (RF-11)")
+    void actualizar_retorna200() throws Exception {
+        MascotaUpdateRequest request = new MascotaUpdateRequest(
+                "Firulais Actualizado",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("29.00"),
+                "https://storage.supabase.co/clinivet/photos/firulais_v2.jpg",
+                true
+        );
+
+        MascotaResponse responseActualizada = new MascotaResponse(
+                MASCOTA_ID,
+                "Firulais Actualizado",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("29.00"),
+                "https://storage.supabase.co/clinivet/photos/firulais_v2.jpg",
+                true,
+                PROPIETARIO_ID,
+                "Carlos Mendoza Ramos",
+                LocalDateTime.of(2026, 10, 27, 10, 0)
+        );
+
+        when(mascotaService.actualizar(eq(MASCOTA_ID), any(MascotaUpdateRequest.class)))
+                .thenReturn(responseActualizada);
+
+        mockMvc.perform(put("/api/mascotas/{id}", MASCOTA_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(MASCOTA_ID.toString()))
+                .andExpect(jsonPath("$.nombre").value("Firulais Actualizado"))
+                .andExpect(jsonPath("$.pesoActualKg").value(29.00))
+                .andExpect(jsonPath("$.fotoUrl").value("https://storage.supabase.co/clinivet/photos/firulais_v2.jpg"))
+                .andExpect(jsonPath("$.propietarioId").value(PROPIETARIO_ID.toString()))
+                .andExpect(jsonPath("$.propietarioNombre").value("Carlos Mendoza Ramos"));
+    }
+
+    @Test
+    @DisplayName("PUT /api/mascotas/{id}: Retorna 404 Not Found cuando la mascota a actualizar no existe (RF-11)")
+    void actualizar_noExiste_retorna404() throws Exception {
+        UUID inexistente = UUID.randomUUID();
+        MascotaUpdateRequest request = new MascotaUpdateRequest(
+                "Firulais Actualizado",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                null,
+                new BigDecimal("29.00"),
+                null,
+                true
+        );
+
+        when(mascotaService.actualizar(eq(inexistente), any(MascotaUpdateRequest.class)))
+                .thenThrow(new ResourceNotFoundException("Mascota no encontrada con ID: " + inexistente));
+
+        mockMvc.perform(put("/api/mascotas/{id}", inexistente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.mensaje").value("Mascota no encontrada con ID: " + inexistente));
+    }
+
+    @Test
+    @DisplayName("PUT /api/mascotas/{id}: Retorna 400 Bad Request cuando los datos de actualización son inválidos (RF-11)")
+    void actualizar_datosInvalidos_retorna400() throws Exception {
+        MascotaUpdateRequest requestInvalido = new MascotaUpdateRequest(
+                "", // nombre en blanco
+                "", // especie en blanco
+                null,
+                null,
+                "Invalido", // sexo inválido
+                LocalDate.now().plusDays(5), // fecha futura no permitida
+                new BigDecimal("-5.00"), // peso negativo no permitido
+                null,
+                null
+        );
+
+        mockMvc.perform(put("/api/mascotas/{id}", MASCOTA_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestInvalido)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"));
     }
 }

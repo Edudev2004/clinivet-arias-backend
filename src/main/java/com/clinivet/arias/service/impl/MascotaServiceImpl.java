@@ -2,6 +2,7 @@ package com.clinivet.arias.service.impl;
 
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
+import com.clinivet.arias.dto.MascotaUpdateRequest;
 import com.clinivet.arias.model.Mascota;
 import com.clinivet.arias.model.Propietario;
 import com.clinivet.arias.repository.MascotaRepository;
@@ -117,6 +118,52 @@ public class MascotaServiceImpl implements IMascotaService {
         MascotaResponse response = mapearAResponse(mascota, mascota.getPropietario());
         response.setPesoActualKg(pesoMasReciente);
         return response;
+    }
+
+    @Override
+    @Transactional
+    public MascotaResponse actualizar(UUID id, MascotaUpdateRequest request) {
+        Preconditions.checkNotNull(id, "El identificador de la mascota no puede ser nulo");
+        Preconditions.checkNotNull(request, "La solicitud de actualización no puede ser nula");
+        Preconditions.checkNotNull(request.getNombre(), "El nombre de la mascota es obligatorio");
+        Preconditions.checkNotNull(request.getEspecie(), "La especie de la mascota es obligatoria");
+        Preconditions.checkNotNull(request.getSexo(), "El sexo de la mascota es obligatorio");
+
+        log.info("Iniciando actualización de datos de la mascota [{}] (RF-11)", id);
+
+        // 1. Obtener mascota existente o lanzar 404
+        Mascota mascota = mascotaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Mascota no encontrada con ID: " + id));
+
+        // 2. Limpieza defensiva y normalización
+        String nombre = StringUtils.trim(request.getNombre());
+        String especie = StringUtils.trim(request.getEspecie());
+        String raza = StringUtils.trimToNull(request.getRaza());
+        String color = StringUtils.trimToNull(request.getColor());
+        String fotoUrl = StringUtils.trimToNull(request.getFotoUrl());
+        String sexo = normalizarSexo(StringUtils.trim(request.getSexo()));
+
+        // 3. Modificar campos permitidos (el vínculo con el propietario es permanente y no se altera)
+        mascota.setNombre(nombre);
+        mascota.setEspecie(especie);
+        mascota.setRaza(raza);
+        mascota.setColor(color);
+        mascota.setSexo(sexo);
+        mascota.setFechaNacimiento(request.getFechaNacimiento());
+        if (request.getPesoActualKg() != null) {
+            mascota.setPesoActualKg(request.getPesoActualKg());
+        }
+        mascota.setFotoUrl(fotoUrl);
+        if (request.getActivo() != null) {
+            mascota.setActivo(request.getActivo());
+        }
+
+        Mascota actualizada = mascotaRepository.save(mascota);
+
+        log.info("Mascota [{}] (ID: [{}]) actualizada con éxito manteniendo propietario [{}]",
+                actualizada.getNombre(), actualizada.getId(), actualizada.getPropietario().getId());
+
+        return mapearAResponse(actualizada, actualizada.getPropietario());
     }
 
     private String normalizarSexo(String sexoRaw) {
