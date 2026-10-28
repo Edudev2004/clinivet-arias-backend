@@ -3,6 +3,7 @@ package com.clinivet.arias.controller;
 import com.clinivet.arias.config.GlobalExceptionHandler;
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
+import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.service.IMascotaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -26,6 +27,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -162,5 +164,39 @@ class MascotaControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.error").value("Bad Request"));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-10: PRUEBAS DE CONSULTA DE FICHA COMPLETA DE MASCOTA (GET /api/mascotas/{id})
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("GET /api/mascotas/{id}: Retorna 200 OK con ficha completa y datos de propietario (RF-10)")
+    void obtenerPorId_retorna200() throws Exception {
+        when(mascotaService.obtenerPorId(MASCOTA_ID)).thenReturn(responseValida);
+
+        mockMvc.perform(get("/api/mascotas/{id}", MASCOTA_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(MASCOTA_ID.toString()))
+                .andExpect(jsonPath("$.nombre").value("Firulais"))
+                .andExpect(jsonPath("$.especie").value("Canino"))
+                .andExpect(jsonPath("$.raza").value("Golden Retriever"))
+                .andExpect(jsonPath("$.sexo").value("Macho"))
+                .andExpect(jsonPath("$.pesoActualKg").value(28.50))
+                .andExpect(jsonPath("$.propietarioId").value(PROPIETARIO_ID.toString()))
+                .andExpect(jsonPath("$.propietarioNombre").value("Carlos Mendoza Ramos"));
+    }
+
+    @Test
+    @DisplayName("GET /api/mascotas/{id}: Retorna 404 Not Found cuando la mascota no existe (RF-10)")
+    void obtenerPorId_noExiste_retorna404() throws Exception {
+        UUID inexistente = UUID.randomUUID();
+        when(mascotaService.obtenerPorId(inexistente))
+                .thenThrow(new ResourceNotFoundException("Mascota no encontrada con ID: " + inexistente));
+
+        mockMvc.perform(get("/api/mascotas/{id}", inexistente))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.mensaje").value("Mascota no encontrada con ID: " + inexistente));
     }
 }
