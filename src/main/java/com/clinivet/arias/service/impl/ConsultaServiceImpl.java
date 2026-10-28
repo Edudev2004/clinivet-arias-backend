@@ -3,7 +3,12 @@ package com.clinivet.arias.service.impl;
 import com.clinivet.arias.dto.ConsultaRequest;
 import com.clinivet.arias.dto.ConsultaResponse;
 import com.clinivet.arias.exception.ConsultaDuplicadaException;
+import com.clinivet.arias.dto.DiagnosticoRequest;
+import com.clinivet.arias.dto.DiagnosticoResponse;
+import com.clinivet.arias.exception.DiagnosticoDuplicadoException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
+import java.time.LocalDateTime;
+import java.util.UUID;
 import com.clinivet.arias.model.Cita;
 import com.clinivet.arias.model.Consulta;
 import com.clinivet.arias.model.EstadoCita;
@@ -122,6 +127,38 @@ public class ConsultaServiceImpl implements IConsultaService {
                 guardada.getTemperaturaC(),
                 guardada.getObservaciones(),
                 guardada.getCreatedAt()
+        );
+    }
+
+    @Override
+    @Transactional
+    public DiagnosticoResponse registrarDiagnostico(UUID consultaId, DiagnosticoRequest request) {
+        Preconditions.checkNotNull(consultaId, "El ID de la consulta es requerido");
+        Preconditions.checkNotNull(request, "La solicitud de diagnóstico no puede ser nula");
+        Preconditions.checkNotNull(request.getDescripcion(), "La descripción del diagnóstico es obligatoria");
+
+        // 1. La consulta debe existir (HTTP 404)
+        Consulta consulta = consultaRepository.findById(consultaId)
+                .orElseThrow(() -> new ResourceNotFoundException("Consulta médica no encontrada con ID: " + consultaId));
+
+        // 2. Solo puede haber un diagnóstico por consulta; si ya existe, retorna HTTP 409
+        if (StringUtils.isNotBlank(consulta.getDiagnostico())) {
+            log.warn("Rechazo de diagnóstico: la consulta [{}] ya tiene un diagnóstico registrado", consultaId);
+            throw new DiagnosticoDuplicadoException("La consulta ya tiene un diagnóstico registrado");
+        }
+
+        // 3. Vincular y persistir el diagnóstico
+        String descripcion = request.getDescripcion().trim();
+        consulta.setDiagnostico(descripcion);
+        consultaRepository.save(consulta);
+
+        log.info("Diagnóstico registrado exitosamente para la consulta [{}]", consultaId);
+
+        return new DiagnosticoResponse(
+                consulta.getId(),
+                descripcion,
+                StringUtils.trimToNull(request.getCodigoCIE()),
+                LocalDateTime.now()
         );
     }
 }

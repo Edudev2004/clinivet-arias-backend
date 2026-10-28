@@ -3,7 +3,11 @@ package com.clinivet.arias.controller;
 import com.clinivet.arias.dto.ApiErrorResponse;
 import com.clinivet.arias.dto.ConsultaRequest;
 import com.clinivet.arias.dto.ConsultaResponse;
+import com.clinivet.arias.dto.DiagnosticoRequest;
+import com.clinivet.arias.dto.DiagnosticoResponse;
 import com.clinivet.arias.service.IConsultaService;
+import java.util.UUID;
+import org.springframework.web.bind.annotation.PathVariable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -52,5 +56,28 @@ public class ConsultaController {
     })
     public ResponseEntity<ConsultaResponse> registrarConsulta(@Valid @RequestBody ConsultaRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(consultaService.registrarConsulta(request));
+    }
+
+    @PostMapping("/{id}/diagnostico")
+    @PreAuthorize("hasRole('VETERINARIO')") // RN-04: solo veterinarios registran atención clínica
+    @Operation(summary = "Registrar diagnóstico de una consulta médica (RF-21)",
+            description = "Registra la conclusión clínica de una atención médica vinculada a la consulta (RF-21)")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Diagnóstico registrado exitosamente",
+                    content = @Content(schema = @Schema(implementation = DiagnosticoResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos o descripción vacía",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "El usuario no tiene rol VETERINARIO",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Consulta médica no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "La consulta ya cuenta con un diagnóstico registrado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<DiagnosticoResponse> registrarDiagnostico(
+            @PathVariable UUID id,
+            @Valid @RequestBody DiagnosticoRequest request) {
+        DiagnosticoResponse response = consultaService.registrarDiagnostico(id, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

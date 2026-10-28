@@ -2,7 +2,10 @@ package com.clinivet.arias.service;
 
 import com.clinivet.arias.dto.ConsultaRequest;
 import com.clinivet.arias.dto.ConsultaResponse;
+import com.clinivet.arias.dto.DiagnosticoRequest;
+import com.clinivet.arias.dto.DiagnosticoResponse;
 import com.clinivet.arias.exception.ConsultaDuplicadaException;
+import com.clinivet.arias.exception.DiagnosticoDuplicadoException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.model.Cita;
 import com.clinivet.arias.model.Consulta;
@@ -218,5 +221,57 @@ class ConsultaServiceTest {
         assertThrows(NullPointerException.class, () -> consultaService.registrarConsulta(request));
 
         verifyNoInteractions(citaRepository, consultaRepository, mascotaRepository);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-21: PRUEBAS DE REGISTRO DE DIAGNÓSTICO POR CONSULTA
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("RF-21: registro exitoso de diagnóstico vincula y persiste el diagnóstico en la consulta")
+    void registrarDiagnostico_Exitoso() {
+        Consulta consultaSinDiag = new Consulta();
+        consultaSinDiag.setId(consultaId);
+        consultaSinDiag.setCitaId(citaId);
+        consultaSinDiag.setMotivo("Control");
+        consultaSinDiag.setDiagnostico(""); // Sin diagnóstico inicial
+
+        DiagnosticoRequest diagReq = new DiagnosticoRequest("Otitis externa bacteriana", "H60.9");
+        when(consultaRepository.findById(consultaId)).thenReturn(Optional.of(consultaSinDiag));
+        when(consultaRepository.save(any(Consulta.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DiagnosticoResponse response = consultaService.registrarDiagnostico(consultaId, diagReq);
+
+        assertNotNull(response);
+        assertEquals(consultaId, response.getConsultaId());
+        assertEquals("Otitis externa bacteriana", response.getDescripcion());
+        assertEquals("H60.9", response.getCodigoCIE());
+        assertEquals("Otitis externa bacteriana", consultaSinDiag.getDiagnostico());
+        verify(consultaRepository).save(consultaSinDiag);
+    }
+
+    @Test
+    @DisplayName("RF-21: consulta no encontrada lanza ResourceNotFoundException (404)")
+    void registrarDiagnostico_ConsultaNoExiste_Lanza404() {
+        UUID noExisteId = UUID.randomUUID();
+        DiagnosticoRequest diagReq = new DiagnosticoRequest("Diagnóstico válido", null);
+        when(consultaRepository.findById(noExisteId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> consultaService.registrarDiagnostico(noExisteId, diagReq));
+        verify(consultaRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF-21: consulta con diagnóstico previo lanza DiagnosticoDuplicadoException (409)")
+    void registrarDiagnostico_Duplicado_Lanza409() {
+        Consulta consultaConDiag = new Consulta();
+        consultaConDiag.setId(consultaId);
+        consultaConDiag.setDiagnostico("Diagnóstico previo ya asentado");
+
+        DiagnosticoRequest diagReq = new DiagnosticoRequest("Nuevo intento de diagnóstico", null);
+        when(consultaRepository.findById(consultaId)).thenReturn(Optional.of(consultaConDiag));
+
+        assertThrows(DiagnosticoDuplicadoException.class, () -> consultaService.registrarDiagnostico(consultaId, diagReq));
+        verify(consultaRepository, never()).save(any());
     }
 }
