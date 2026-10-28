@@ -1,8 +1,10 @@
 package com.clinivet.arias.controller;
 
 import com.clinivet.arias.dto.ApiErrorResponse;
+import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.PropietarioCreateRequest;
 import com.clinivet.arias.dto.PropietarioResponse;
+import com.clinivet.arias.dto.PropietarioUpdateRequest;
 import com.clinivet.arias.service.IPropietarioService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -19,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -96,8 +99,21 @@ public class PropietarioController {
     })
     public ResponseEntity<PropietarioResponse> actualizar(
             @PathVariable UUID id,
-            @Valid @RequestBody com.clinivet.arias.dto.PropietarioUpdateRequest request) {
+            @Valid @RequestBody PropietarioUpdateRequest request) {
         PropietarioResponse response = propietarioService.actualizar(id, request);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/mascotas")
+    @Operation(summary = "Consultar mascotas por propietario (RF-08)",
+            description = "Retorna la lista de mascotas registradas asociadas a un propietario específico. Si el propietario no tiene mascotas, retorna una lista vacía con HTTP 200.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Lista de mascotas obtenida exitosamente"),
+            @ApiResponse(responseCode = "404", description = "Propietario no encontrado con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<List<MascotaResponse>> listarMascotas(@PathVariable UUID id) {
+        List<MascotaResponse> mascotas = propietarioService.listarMascotasPorPropietario(id);
+        return ResponseEntity.ok(mascotas);
     }
 }

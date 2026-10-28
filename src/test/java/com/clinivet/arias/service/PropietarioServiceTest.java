@@ -1,10 +1,12 @@
 package com.clinivet.arias.service;
 
+import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.PropietarioCreateRequest;
 import com.clinivet.arias.dto.PropietarioResponse;
 import com.clinivet.arias.dto.PropietarioUpdateRequest;
 import com.clinivet.arias.exception.DuplicateResourceException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
+import com.clinivet.arias.model.Mascota;
 import com.clinivet.arias.model.Propietario;
 import com.clinivet.arias.repository.MascotaRepository;
 import com.clinivet.arias.repository.PropietarioRepository;
@@ -21,6 +23,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -399,5 +403,96 @@ class PropietarioServiceTest {
         assertEquals("999888777", response.getTelefono());
         assertEquals("carlos@gmail.com", response.getEmail());
         assertEquals("Av. Universitaria", response.getDireccion());
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-08: PRUEBAS DE CONSULTA DE MASCOTAS POR PROPIETARIO
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("RF-08.1: Debe retornar la lista de mascotas activas vinculadas a un propietario existente")
+    void listarMascotasPorPropietario_conMascotas_retornaLista() {
+        UUID mascotaId1 = UUID.fromString("f0000000-0000-0000-0000-000000000001");
+        UUID mascotaId2 = UUID.fromString("f0000000-0000-0000-0000-000000000002");
+
+        Mascota m1 = new Mascota(
+                mascotaId1,
+                propietarioPersistido,
+                "Firulais",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("28.50"),
+                true
+        );
+
+        Mascota m2 = new Mascota(
+                mascotaId2,
+                propietarioPersistido,
+                "Michi",
+                "Felino",
+                "Siamés",
+                "Blanco y Café",
+                "Hembra",
+                LocalDate.of(2023, 7, 20),
+                new BigDecimal("4.20"),
+                true
+        );
+
+        when(propietarioRepository.findById(PROPIETARIO_ID)).thenReturn(Optional.of(propietarioPersistido));
+        when(mascotaRepository.findByPropietarioIdAndActivoTrue(PROPIETARIO_ID)).thenReturn(List.of(m1, m2));
+
+        List<MascotaResponse> resultado = propietarioService.listarMascotasPorPropietario(PROPIETARIO_ID);
+
+        assertNotNull(resultado);
+        assertEquals(2, resultado.size());
+
+        MascotaResponse r1 = resultado.get(0);
+        assertEquals(mascotaId1, r1.getId());
+        assertEquals("Firulais", r1.getNombre());
+        assertEquals("Canino", r1.getEspecie());
+        assertEquals("Golden Retriever", r1.getRaza());
+        assertEquals("Macho", r1.getSexo());
+        assertEquals(LocalDate.of(2022, 3, 10), r1.getFechaNacimiento());
+        assertEquals(new BigDecimal("28.50"), r1.getPesoActualKg());
+        assertEquals(PROPIETARIO_ID, r1.getPropietarioId());
+        assertEquals("Carlos Mendoza Ramos", r1.getPropietarioNombre());
+
+        MascotaResponse r2 = resultado.get(1);
+        assertEquals(mascotaId2, r2.getId());
+        assertEquals("Michi", r2.getNombre());
+        assertEquals("Felino", r2.getEspecie());
+
+        verify(propietarioRepository, times(1)).findById(PROPIETARIO_ID);
+        verify(mascotaRepository, times(1)).findByPropietarioIdAndActivoTrue(PROPIETARIO_ID);
+    }
+
+    @Test
+    @DisplayName("RF-08.2: Debe retornar lista vacía (sin error) si el propietario no tiene mascotas")
+    void listarMascotasPorPropietario_sinMascotas_retornaListaVacia() {
+        when(propietarioRepository.findById(PROPIETARIO_ID)).thenReturn(Optional.of(propietarioPersistido));
+        when(mascotaRepository.findByPropietarioIdAndActivoTrue(PROPIETARIO_ID)).thenReturn(Collections.emptyList());
+
+        List<MascotaResponse> resultado = propietarioService.listarMascotasPorPropietario(PROPIETARIO_ID);
+
+        assertNotNull(resultado);
+        assertTrue(resultado.isEmpty());
+        verify(propietarioRepository, times(1)).findById(PROPIETARIO_ID);
+        verify(mascotaRepository, times(1)).findByPropietarioIdAndActivoTrue(PROPIETARIO_ID);
+    }
+
+    @Test
+    @DisplayName("RF-08.3: Debe lanzar ResourceNotFoundException (404) si el propietario no existe")
+    void listarMascotasPorPropietario_propietarioNoExiste_lanzaNotFound() {
+        UUID noExistente = UUID.randomUUID();
+        when(propietarioRepository.findById(noExistente)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> propietarioService.listarMascotasPorPropietario(noExistente));
+
+        verify(propietarioRepository, times(1)).findById(noExistente);
+        verify(mascotaRepository, never()).findByPropietarioIdAndActivoTrue(any(UUID.class));
     }
 }
