@@ -5,6 +5,7 @@ import com.clinivet.arias.dto.PropietarioResponse;
 import com.clinivet.arias.exception.DuplicateResourceException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.model.Propietario;
+import com.clinivet.arias.repository.MascotaRepository;
 import com.clinivet.arias.repository.PropietarioRepository;
 import com.clinivet.arias.service.impl.PropietarioServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,27 +15,36 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
  * Pruebas unitarias para {@link PropietarioServiceImpl} con Mockito.
- * Valida los criterios de aceptación de RF-05:
- * - Registro exitoso de propietario con ID generado
- * - DNI único: si ya existe retorna HTTP 409 (DuplicateResourceException)
- * - Limpieza de datos (trimming) y validación defensiva con Guava
+ * Valida los criterios de aceptación de:
+ * - RF-05: Registro exitoso, DNI único (409) y validación defensiva.
+ * - RF-06: Búsqueda flexible por nombre/apellido, DNI, UUID, lista vacía y conteo de mascotas.
  */
 @ExtendWith(MockitoExtension.class)
 class PropietarioServiceTest {
 
     @Mock
     private PropietarioRepository propietarioRepository;
+
+    @Mock
+    private MascotaRepository mascotaRepository;
 
     @InjectMocks
     private PropietarioServiceImpl propietarioService;
@@ -144,12 +154,14 @@ class PropietarioServiceTest {
     @DisplayName("RF-05.5: Debe consultar exitosamente un propietario por ID")
     void obtenerPorId_exitoso() {
         when(propietarioRepository.findById(PROPIETARIO_ID)).thenReturn(Optional.of(propietarioPersistido));
+        when(mascotaRepository.countByPropietarioIdAndActivoTrue(PROPIETARIO_ID)).thenReturn(2L);
 
         PropietarioResponse response = propietarioService.obtenerPorId(PROPIETARIO_ID);
 
         assertNotNull(response);
         assertEquals(PROPIETARIO_ID, response.getId());
         assertEquals("45871236", response.getDni());
+        assertEquals(2L, response.getCantidadMascotas());
         verify(propietarioRepository, times(1)).findById(PROPIETARIO_ID);
     }
 
@@ -161,5 +173,91 @@ class PropietarioServiceTest {
 
         assertThrows(ResourceNotFoundException.class, () -> propietarioService.obtenerPorId(noExistente));
         verify(propietarioRepository, times(1)).findById(noExistente);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-06: PRUEBAS DE BÚSQUEDA Y PAGINACIÓN
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("RF-06.1: Si el término es nulo o vacío, debe retornar lista paginada de todos los activos")
+    void buscar_terminoVacio_retornaTodosActivos() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Propietario> paginaPropietarios = new PageImpl<>(List.of(propietarioPersistido), pageable, 1);
+
+        when(propietarioRepository.findByActivoTrue(pageable)).thenReturn(paginaPropietarios);
+        when(mascotaRepository.countByPropietarioIdAndActivoTrue(PROPIETARIO_ID)).thenReturn(3L);
+
+        Page<PropietarioResponse> resultado = propietarioService.buscar(null, pageable);
+
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals("Carlos", resultado.getContent().get(0).getNombre());
+        assertEquals(3L, resultado.getContent().get(0).getCantidadMascotas());
+        verify(propietarioRepository, times(1)).findByActivoTrue(pageable);
+    }
+
+    @Test
+    @DisplayName("RF-06.2: Debe buscar coincidencias por nombre o apellido parcial")
+    void buscar_porNombre_retornaCoincidencias() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Propietario> paginaPropietarios = new PageImpl<>(List.of(propietarioPersistido), pageable, 1);
+
+        when(propietarioRepository.buscarPorTermino("Mendoza", pageable)).thenReturn(paginaPropietarios);
+        when(mascotaRepository.countByPropietarioIdAndActivoTrue(PROPIETARIO_ID)).thenReturn(1L);
+
+        Page<PropietarioResponse> resultado = propietarioService.buscar("Mendoza", pageable);
+
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals("Mendoza Ramos", resultado.getContent().get(0).getApellido());
+        verify(propietarioRepository, times(1)).buscarPorTermino("Mendoza", pageable);
+    }
+
+    @Test
+    @DisplayName("RF-06.3: Debe buscar coincidencia por DNI")
+    void buscar_porDni_retornaCoincidencia() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Propietario> paginaPropietarios = new PageImpl<>(List.of(propietarioPersistido), pageable, 1);
+
+        when(propietarioRepository.buscarPorTermino("45871236", pageable)).thenReturn(paginaPropietarios);
+        when(mascotaRepository.countByPropietarioIdAndActivoTrue(PROPIETARIO_ID)).thenReturn(0L);
+
+        Page<PropietarioResponse> resultado = propietarioService.buscar("45871236", pageable);
+
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals("45871236", resultado.getContent().get(0).getDni());
+        assertEquals(0L, resultado.getContent().get(0).getCantidadMascotas());
+    }
+
+    @Test
+    @DisplayName("RF-06.4: Debe buscar por UUID directamente si el término tiene formato de identificador")
+    void buscar_porUUID_retornaCoincidenciaDirecta() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(propietarioRepository.findById(PROPIETARIO_ID)).thenReturn(Optional.of(propietarioPersistido));
+        when(mascotaRepository.countByPropietarioIdAndActivoTrue(PROPIETARIO_ID)).thenReturn(2L);
+
+        Page<PropietarioResponse> resultado = propietarioService.buscar(PROPIETARIO_ID.toString(), pageable);
+
+        assertNotNull(resultado);
+        assertEquals(1, resultado.getTotalElements());
+        assertEquals(PROPIETARIO_ID, resultado.getContent().get(0).getId());
+        verify(propietarioRepository, times(1)).findById(PROPIETARIO_ID);
+    }
+
+    @Test
+    @DisplayName("RF-06.5: Si no hay coincidencias, debe retornar lista vacía con 0 elementos (sin error)")
+    void buscar_sinCoincidencias_retornaPaginaVacia() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Propietario> paginaVacia = new PageImpl<>(Collections.emptyList(), pageable, 0);
+
+        when(propietarioRepository.buscarPorTermino("Inexistente999", pageable)).thenReturn(paginaVacia);
+
+        Page<PropietarioResponse> resultado = propietarioService.buscar("Inexistente999", pageable);
+
+        assertNotNull(resultado);
+        assertEquals(0, resultado.getTotalElements());
+        assertTrue(resultado.getContent().isEmpty());
     }
 }

@@ -15,14 +15,22 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -31,11 +39,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Pruebas unitarias de capa Web para {@link PropietarioController} con MockMvc.
- * Valida códigos HTTP:
- * - 201 Created para registro exitoso (RF-05)
- * - 400 Bad Request para validación de datos faltantes/incorrectos
- * - 409 Conflict para DNI duplicado en el sistema
- * - 404 Not Found para propietario inexistente
+ * Valida códigos HTTP y serialización JSON para:
+ * - RF-05: Registro exitoso (201), validación (400) y DNI duplicado (409).
+ * - RF-06: Búsqueda con y sin filtro (200), lista vacía (200) y obtención por ID (200 / 404).
  */
 @ExtendWith(MockitoExtension.class)
 class PropietarioControllerTest {
@@ -57,6 +63,7 @@ class PropietarioControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(propietarioController)
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
                 .build();
 
         objectMapper = new ObjectMapper();
@@ -71,12 +78,13 @@ class PropietarioControllerTest {
                 "carlos.mendoza@gmail.com",
                 "Av. Universitaria 1240, Carabayllo",
                 true,
-                LocalDateTime.of(2026, 10, 27, 10, 0)
+                LocalDateTime.of(2026, 10, 27, 10, 0),
+                2L
         );
     }
 
     @Test
-    @DisplayName("POST /api/propietarios: Retorna 201 Created cuando los datos son válidos")
+    @DisplayName("POST /api/propietarios: Retorna 201 Created cuando los datos son válidos (RF-05)")
     void registrar_retorna201() throws Exception {
         PropietarioCreateRequest request = new PropietarioCreateRequest(
                 "Carlos",
@@ -102,7 +110,7 @@ class PropietarioControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/propietarios: Retorna 409 Conflict cuando el DNI ya existe")
+    @DisplayName("POST /api/propietarios: Retorna 409 Conflict cuando el DNI ya existe (RF-05)")
     void registrar_dniDuplicado_retorna409() throws Exception {
         PropietarioCreateRequest request = new PropietarioCreateRequest(
                 "Carlos",
@@ -143,6 +151,46 @@ class PropietarioControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.error").value("Bad Request"));
+    }
+
+    @Test
+    @DisplayName("GET /api/propietarios: Retorna 200 OK con lista paginada y cantidad de mascotas (RF-06)")
+    void buscar_sinFiltro_retorna200() throws Exception {
+        Page<PropietarioResponse> pagina = new PageImpl<>(List.of(responseValida), PageRequest.of(0, 20), 1);
+        when(propietarioService.buscar(eq(null), any(Pageable.class))).thenReturn(pagina);
+
+        mockMvc.perform(get("/api/propietarios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(PROPIETARIO_ID.toString()))
+                .andExpect(jsonPath("$.content[0].nombre").value("Carlos"))
+                .andExpect(jsonPath("$.content[0].dni").value("45871236"))
+                .andExpect(jsonPath("$.content[0].cantidadMascotas").value(2))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /api/propietarios?q=Mendoza: Retorna 200 OK con coincidencias (RF-06)")
+    void buscar_conFiltro_retorna200() throws Exception {
+        Page<PropietarioResponse> pagina = new PageImpl<>(List.of(responseValida), PageRequest.of(0, 20), 1);
+        when(propietarioService.buscar(eq("Mendoza"), any(Pageable.class))).thenReturn(pagina);
+
+        mockMvc.perform(get("/api/propietarios").param("q", "Mendoza"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].apellido").value("Mendoza Ramos"))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /api/propietarios?q=Inexistente: Retorna 200 OK con lista vacía (no 404) (RF-06)")
+    void buscar_sinCoincidencias_retornaListaVacia() throws Exception {
+        Page<PropietarioResponse> paginaVacia = new PageImpl<>(Collections.emptyList(), PageRequest.of(0, 20), 0);
+        when(propietarioService.buscar(eq("Inexistente"), any(Pageable.class))).thenReturn(paginaVacia);
+
+        mockMvc.perform(get("/api/propietarios").param("q", "Inexistente"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty())
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test

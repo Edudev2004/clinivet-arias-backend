@@ -5,22 +5,30 @@ import com.clinivet.arias.dto.PropietarioResponse;
 import com.clinivet.arias.exception.DuplicateResourceException;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.model.Propietario;
+import com.clinivet.arias.repository.MascotaRepository;
 import com.clinivet.arias.repository.PropietarioRepository;
 import com.clinivet.arias.service.IPropietarioService;
 import com.google.common.base.Preconditions;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Implementación de la lógica de negocio para la gestión de propietarios (RF-05).
+ * Implementación de la lógica de negocio para la gestión de propietarios (RF-05, RF-06).
  * Aplica principios SOLID:
  * - SRP: Exclusivamente enfocado en reglas de negocio de propietarios.
- * - DIP: Implementa la interfaz IPropietarioService y depende de la abstracción PropietarioRepository.
+ * - DIP: Implementa la interfaz IPropietarioService y depende de abstracciones Spring Data JPA.
  * Integra librerías de apoyo: Google Guava (Preconditions), Apache Commons (StringUtils) y Logback (SLF4J).
  */
 @Service
@@ -29,21 +37,21 @@ public class PropietarioServiceImpl implements IPropietarioService {
     private static final Logger log = LoggerFactory.getLogger(PropietarioServiceImpl.class);
 
     private final PropietarioRepository propietarioRepository;
+    private final MascotaRepository mascotaRepository;
 
-    public PropietarioServiceImpl(PropietarioRepository propietarioRepository) {
+    public PropietarioServiceImpl(PropietarioRepository propietarioRepository, MascotaRepository mascotaRepository) {
         this.propietarioRepository = propietarioRepository;
+        this.mascotaRepository = mascotaRepository;
     }
 
     @Override
     @Transactional
     public PropietarioResponse registrar(PropietarioCreateRequest request) {
-        // 1. Validación defensiva con Google Guava
         Preconditions.checkNotNull(request, "La solicitud de registro no puede ser nula");
         Preconditions.checkNotNull(request.getDni(), "El DNI del propietario no puede ser nulo");
         Preconditions.checkNotNull(request.getNombre(), "El nombre del propietario no puede ser nulo");
         Preconditions.checkNotNull(request.getApellido(), "El apellido del propietario no puede ser nulo");
 
-        // 2. Limpieza y normalización de textos con Apache Commons
         String dni = StringUtils.trim(request.getDni());
         String nombre = StringUtils.trim(request.getNombre());
         String apellido = StringUtils.trim(request.getApellido());
@@ -53,13 +61,11 @@ public class PropietarioServiceImpl implements IPropietarioService {
 
         log.info("Iniciando registro de nuevo propietario con DNI [{}] y nombre [{} {}]", dni, nombre, apellido);
 
-        // 3. Regla de negocio: El DNI debe ser único en el sistema
         if (propietarioRepository.findByDni(dni).isPresent()) {
             log.warn("Rechazo de registro: ya existe un propietario registrado con el DNI [{}]", dni);
             throw new DuplicateResourceException("Ya existe un propietario registrado con el DNI: " + dni);
         }
 
-        // 4. Creación y persistencia de la entidad
         Propietario nuevoPropietario = new Propietario(
                 null,
                 nombre,
@@ -90,7 +96,43 @@ public class PropietarioServiceImpl implements IPropietarioService {
         return mapearAResponse(propietario);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Page<PropietarioResponse> buscar(String termino, Pageable pageable) {
+        Pageable paginacion = pageable != null ? pageable : PageRequest.of(0, 20);
+        String query = StringUtils.trimToNull(termino);
+
+        log.debug("Ejecutando búsqueda de propietarios con término [{}] y paginación [{}] (RF-06)", query, paginacion);
+
+        if (query == null) {
+            Page<Propietario> pagina = propietarioRepository.findByActivoTrue(paginacion);
+            return pagina.map(this::mapearAResponse);
+        }
+
+        // Si el término corresponde a un formato UUID, buscar directamente por ID
+        try {
+            UUID idBuscado = UUID.fromString(query);
+            Optional<Propietario> porId = propietarioRepository.findById(idBuscado);
+            if (porId.isPresent()) {
+                List<PropietarioResponse> lista = Collections.singletonList(mapearAResponse(porId.get()));
+                return new PageImpl<>(lista, paginacion, 1);
+            }
+        } catch (IllegalArgumentException ignored) {
+            // No es UUID, continuar búsqueda textual
+        }
+
+        Page<Propietario> resultados = propietarioRepository.buscarPorTermino(query, paginacion);
+        log.debug("Búsqueda completada: {} propietarios encontrados", resultados.getTotalElements());
+
+        return resultados.map(this::mapearAResponse);
+    }
+
     private PropietarioResponse mapearAResponse(Propietario p) {
+        long cantidadMascotas = 0L;
+        if (p.getId() != null && mascotaRepository != null) {
+            cantidadMascotas = mascotaRepository.countByPropietarioIdAndActivoTrue(p.getId());
+        }
+
         return new PropietarioResponse(
                 p.getId(),
                 p.getNombre(),
@@ -100,7 +142,8 @@ public class PropietarioServiceImpl implements IPropietarioService {
                 p.getEmail(),
                 p.getDireccion(),
                 p.getActivo(),
-                p.getCreatedAt()
+                p.getCreatedAt(),
+                cantidadMascotas
         );
     }
 }

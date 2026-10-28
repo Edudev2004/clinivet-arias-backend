@@ -40,10 +40,17 @@ public class PropietarioResponse {
     @Schema(description = "Fecha y hora de registro", example = "2026-10-27T10:00:00")
     private LocalDateTime createdAt;
 
+    @Schema(description = "Cantidad de mascotas registradas a nombre del propietario (RF-06)", example = "2")
+    private Long cantidadMascotas = 0L;
+
     public PropietarioResponse() {
     }
 
     public PropietarioResponse(UUID id, String nombre, String apellido, String dni, String telefono, String email, String direccion, Boolean activo, LocalDateTime createdAt) {
+        this(id, nombre, apellido, dni, telefono, email, direccion, activo, createdAt, 0L);
+    }
+
+    public PropietarioResponse(UUID id, String nombre, String apellido, String dni, String telefono, String email, String direccion, Boolean activo, LocalDateTime createdAt, Long cantidadMascotas) {
         this.id = id;
         this.nombre = nombre;
         this.apellido = apellido;
@@ -54,6 +61,7 @@ public class PropietarioResponse {
         this.direccion = direccion;
         this.activo = activo;
         this.createdAt = createdAt;
+        this.cantidadMascotas = cantidadMascotas != null ? cantidadMascotas : 0L;
     }
 
     public UUID getId() {
@@ -134,5 +142,13 @@ public class PropietarioResponse {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Long getCantidadMascotas() {
+        return cantidadMascotas;
+    }
+
+    public void setCantidadMascotas(Long cantidadMascotas) {
+        this.cantidadMascotas = cantidadMascotas;
     }
 }
