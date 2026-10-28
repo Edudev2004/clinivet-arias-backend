@@ -15,4 +15,6 @@ import java.util.UUID;
 public interface ConsultaRepository extends JpaRepository<Consulta, UUID> {
 
     Optional<Consulta> findByCitaId(UUID citaId);
+
+    boolean existsByCitaId(UUID citaId);
 }
