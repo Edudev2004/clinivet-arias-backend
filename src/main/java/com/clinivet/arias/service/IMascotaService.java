@@ -1,9 +1,13 @@
 package com.clinivet.arias.service;
 
+import com.clinivet.arias.dto.HistorialConsultaResponse;
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.MascotaUpdateRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -49,4 +53,22 @@ public interface IMascotaService {
      * @return lista de fichas de mascotas activas con su peso vigente
      */
     List<MascotaResponse> listarTodas();
+
+    /**
+     * Consulta el historial clínico completo de una mascota ordenado cronológicamente con filtros opcionales (RF-25 / RF-26).
+     *
+     * @param mascotaId identificador único de la mascota
+     * @param fechaInicio fecha inicial del filtro opcional
+     * @param fechaFin fecha final del filtro opcional
+     * @param veterinarioId identificador del veterinario del filtro opcional
+     * @param pageable configuración de paginación (por defecto 20 registros)
+     * @return página con el historial de consultas médicas, diagnósticos, tratamientos y vacunas
+     */
+    Page<HistorialConsultaResponse> obtenerHistorial(
+            UUID mascotaId,
+            LocalDate fechaInicio,
+            LocalDate fechaFin,
+            UUID veterinarioId,
+            Pageable pageable
+    );
 }

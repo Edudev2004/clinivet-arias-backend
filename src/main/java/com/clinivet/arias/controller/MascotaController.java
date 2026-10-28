@@ -1,6 +1,7 @@
 package com.clinivet.arias.controller;
 
 import com.clinivet.arias.dto.ApiErrorResponse;
+import com.clinivet.arias.dto.HistorialConsultaResponse;
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.MascotaUpdateRequest;
@@ -15,11 +16,16 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -133,5 +139,26 @@ public class MascotaController {
     public ResponseEntity<List<VacunaAplicadaResponse>> listarVacunas(@PathVariable UUID id) {
         List<VacunaAplicadaResponse> response = vacunaService.listarPorMascota(id);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/historial")
+    @Operation(summary = "Consultar historial clínico completo de una mascota (RF-25 / RF-26)",
+            description = "Retorna el historial cronológico de consultas, diagnósticos, tratamientos y vacunas con filtros opcionales de fecha y veterinario.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Historial obtenido exitosamente",
+                    content = @Content(schema = @Schema(implementation = Page.class))),
+            @ApiResponse(responseCode = "404", description = "Mascota no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<Page<HistorialConsultaResponse>> obtenerHistorial(
+            @PathVariable UUID id,
+            @RequestParam(name = "fechaInicio", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
+            @RequestParam(name = "fechaFin", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin,
+            @RequestParam(name = "veterinarioId", required = false) UUID veterinarioId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        Page<HistorialConsultaResponse> historial = mascotaService.obtenerHistorial(id, fechaInicio, fechaFin, veterinarioId, pageable);
+        return ResponseEntity.ok(historial);
     }
 }

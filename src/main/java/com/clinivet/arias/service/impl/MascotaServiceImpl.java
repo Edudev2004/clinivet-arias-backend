@@ -1,30 +1,39 @@
 package com.clinivet.arias.service.impl;
 
+import com.clinivet.arias.dto.HistorialConsultaResponse;
 import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.MascotaUpdateRequest;
+import com.clinivet.arias.dto.TratamientoResponse;
+import com.clinivet.arias.dto.VacunaAplicadaResponse;
+import com.clinivet.arias.exception.ResourceNotFoundException;
+import com.clinivet.arias.model.Cita;
+import com.clinivet.arias.model.Consulta;
 import com.clinivet.arias.model.Mascota;
 import com.clinivet.arias.model.Propietario;
-import com.clinivet.arias.repository.MascotaRepository;
-import com.clinivet.arias.repository.PropietarioRepository;
+import com.clinivet.arias.repository.*;
 import com.clinivet.arias.service.IMascotaService;
 import com.google.common.base.Preconditions;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import com.clinivet.arias.exception.ResourceNotFoundException;
-import com.clinivet.arias.repository.ConsultaRepository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
- * Implementación de la lógica de negocio para la gestión de mascotas y pacientes veterinarios (RF-09).
+ * Implementación de la lógica de negocio para la gestión de mascotas, expedientes y su historial clínico (RF-09, RF-10, RF-11, RF-12, RF-25, RF-26).
  * Aplica principios SOLID:
- * - SRP: Exclusivamente enfocado en el ciclo de vida y reglas de pacientes/mascotas.
+ * - SRP: Exclusivamente enfocado en el ciclo de vida y reglas de pacientes/mascotas y su historial clínico inmutable (RN-09).
  * - DIP: Implementa IMascotaService y se apoya en abstracciones de persistencia Spring Data JPA.
  */
 @Service
@@ -35,13 +44,22 @@ public class MascotaServiceImpl implements IMascotaService {
     private final MascotaRepository mascotaRepository;
     private final PropietarioRepository propietarioRepository;
     private final ConsultaRepository consultaRepository;
+    private final CitaRepository citaRepository;
+    private final TratamientoRepository tratamientoRepository;
+    private final VacunaAplicadaRepository vacunaAplicadaRepository;
 
     public MascotaServiceImpl(MascotaRepository mascotaRepository,
                               PropietarioRepository propietarioRepository,
-                              ConsultaRepository consultaRepository) {
+                              ConsultaRepository consultaRepository,
+                              CitaRepository citaRepository,
+                              TratamientoRepository tratamientoRepository,
+                              VacunaAplicadaRepository vacunaAplicadaRepository) {
         this.mascotaRepository = mascotaRepository;
         this.propietarioRepository = propietarioRepository;
         this.consultaRepository = consultaRepository;
+        this.citaRepository = citaRepository;
+        this.tratamientoRepository = tratamientoRepository;
+        this.vacunaAplicadaRepository = vacunaAplicadaRepository;
     }
 
     @Override
@@ -185,6 +203,93 @@ public class MascotaServiceImpl implements IMascotaService {
                     return res;
                 })
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<HistorialConsultaResponse> obtenerHistorial(
+            UUID mascotaId,
+            LocalDate fechaInicio,
+            LocalDate fechaFin,
+            UUID veterinarioId,
+            Pageable pageable) {
+        log.debug("Consultando historial clínico de la mascota [{}] con filtros (RF-25 / RF-26)", mascotaId);
+
+        if (!mascotaRepository.existsById(mascotaId)) {
+            throw new ResourceNotFoundException("Mascota no encontrada con ID: " + mascotaId);
+        }
+
+        LocalDateTime inicioDateTime = (fechaInicio != null) ? fechaInicio.atStartOfDay() : null;
+        LocalDateTime finDateTime = (fechaFin != null) ? fechaFin.atTime(LocalTime.MAX) : null;
+
+        Page<Consulta> consultasPage = consultaRepository.findHistorialPorMascota(
+                mascotaId,
+                veterinarioId,
+                inicioDateTime,
+                finDateTime,
+                pageable
+        );
+
+        return consultasPage.map(consulta -> {
+            Cita cita = citaRepository.findById(consulta.getCitaId()).orElse(null);
+            LocalDateTime fechaHora = (cita != null) ? cita.getFechaHora() : consulta.getCreatedAt();
+            UUID vetId = (cita != null && cita.getVeterinario() != null) ? cita.getVeterinario().getId() : null;
+            String vetNombre = (cita != null && cita.getVeterinario() != null)
+                    ? cita.getVeterinario().getNombreCompleto().trim() : "";
+
+            // Tratamientos prescritos en la consulta (RF-22 / RF-23)
+            List<TratamientoResponse> tratamientos = tratamientoRepository.findByConsultaIdOrderByCreatedAtAsc(consulta.getId())
+                    .stream()
+                    .map(t -> new TratamientoResponse(
+                            t.getId(),
+                            consulta.getId(),
+                            t.getMedicamento() != null ? t.getMedicamento().getId() : null,
+                            t.getMedicamento() != null ? t.getMedicamento().getNombre() : "Medicamento",
+                            t.getMedicamento() != null ? t.getMedicamento().getPrincipioActivo() : null,
+                            consulta.getPesoKg(),
+                            t.getDosisMgPorKg(),
+                            t.getDosisTotalMg(),
+                            t.getDuracionDias(),
+                            t.getIndicaciones(),
+                            t.getCreatedAt()
+                    ))
+                    .collect(Collectors.toList());
+
+            // Vacunas aplicadas en la consulta (RF-24)
+            List<VacunaAplicadaResponse> vacunas = vacunaAplicadaRepository.findByConsultaId(consulta.getId())
+                    .stream()
+                    .map(v -> new VacunaAplicadaResponse(
+                            v.getId(),
+                            v.getMascota().getId(),
+                            v.getMascota().getNombre(),
+                            v.getVacuna().getId(),
+                            v.getVacuna().getNombre(),
+                            v.getFechaAplicacion(),
+                            v.getProximaDosis(),
+                            v.getVeterinario().getId(),
+                            v.getVeterinario().getNombreCompleto().trim(),
+                            v.getLote(),
+                            consulta.getId(),
+                            v.getCreatedAt()
+                    ))
+                    .collect(Collectors.toList());
+
+            return new HistorialConsultaResponse(
+                    consulta.getId(),
+                    consulta.getCitaId(),
+                    fechaHora,
+                    vetId,
+                    vetNombre,
+                    consulta.getMotivo(),
+                    consulta.getDiagnostico(),
+                    consulta.getPesoKg(),
+                    consulta.getTemperaturaC(),
+                    consulta.getObservaciones(),
+                    tratamientos,
+                    vacunas,
+                    consulta.getCreatedAt()
+            );
+        });
     }
 
     private String normalizarSexo(String sexoRaw) {
