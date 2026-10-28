@@ -12,7 +12,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import com.clinivet.arias.exception.ResourceNotFoundException;
+import com.clinivet.arias.repository.ConsultaRepository;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Implementación de la lógica de negocio para la gestión de mascotas y pacientes veterinarios (RF-09).
@@ -27,10 +33,14 @@ public class MascotaServiceImpl implements IMascotaService {
 
     private final MascotaRepository mascotaRepository;
     private final PropietarioRepository propietarioRepository;
+    private final ConsultaRepository consultaRepository;
 
-    public MascotaServiceImpl(MascotaRepository mascotaRepository, PropietarioRepository propietarioRepository) {
+    public MascotaServiceImpl(MascotaRepository mascotaRepository,
+                              PropietarioRepository propietarioRepository,
+                              ConsultaRepository consultaRepository) {
         this.mascotaRepository = mascotaRepository;
         this.propietarioRepository = propietarioRepository;
+        this.consultaRepository = consultaRepository;
     }
 
     @Override
@@ -82,6 +92,31 @@ public class MascotaServiceImpl implements IMascotaService {
                 propietario.getNombre(), propietario.getApellido());
 
         return mapearAResponse(guardada, propietario);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MascotaResponse obtenerPorId(UUID id) {
+        Preconditions.checkNotNull(id, "El identificador de la mascota no puede ser nulo");
+
+        log.debug("Consultando ficha completa de mascota con ID [{}] (RF-10)", id);
+
+        Mascota mascota = mascotaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Mascota no encontrada con ID: " + id));
+
+        // Criterio de aceptación RF-10: El peso mostrado es el más reciente registrado en cualquier consulta médica
+        BigDecimal pesoMasReciente = mascota.getPesoActualKg();
+        if (consultaRepository != null) {
+            List<BigDecimal> pesosConsultas = consultaRepository.findPesosRecientesPorMascotaId(id);
+            if (pesosConsultas != null && !pesosConsultas.isEmpty() && pesosConsultas.get(0) != null) {
+                pesoMasReciente = pesosConsultas.get(0);
+                log.debug("Se obtuvo peso más reciente [{}] desde consultas médicas para la mascota [{}]", pesoMasReciente, id);
+            }
+        }
+
+        MascotaResponse response = mapearAResponse(mascota, mascota.getPropietario());
+        response.setPesoActualKg(pesoMasReciente);
+        return response;
     }
 
     private String normalizarSexo(String sexoRaw) {

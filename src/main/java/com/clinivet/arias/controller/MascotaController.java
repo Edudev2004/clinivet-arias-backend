@@ -15,6 +15,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 /**
  * Controlador REST para la gestión de pacientes y mascotas de la clínica veterinaria.
  * Aplica principios SOLID:
@@ -44,5 +46,19 @@ public class MascotaController {
     public ResponseEntity<MascotaResponse> registrar(@Valid @RequestBody MascotaCreateRequest request) {
         MascotaResponse response = mascotaService.registrar(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Consultar ficha completa de mascota (RF-10)",
+            description = "Retorna la información completa de la mascota incluyendo el peso más reciente registrado en consultas médicas y datos de su propietario.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Ficha de mascota obtenida exitosamente",
+                    content = @Content(schema = @Schema(implementation = MascotaResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Mascota no encontrada con el ID indicado",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    public ResponseEntity<MascotaResponse> obtenerPorId(@PathVariable UUID id) {
+        MascotaResponse response = mascotaService.obtenerPorId(id);
+        return ResponseEntity.ok(response);
     }
 }

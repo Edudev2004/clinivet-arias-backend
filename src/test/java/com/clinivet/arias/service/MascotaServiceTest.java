@@ -7,6 +7,8 @@ import com.clinivet.arias.model.Propietario;
 import com.clinivet.arias.repository.MascotaRepository;
 import com.clinivet.arias.repository.PropietarioRepository;
 import com.clinivet.arias.service.impl.MascotaServiceImpl;
+import com.clinivet.arias.exception.ResourceNotFoundException;
+import com.clinivet.arias.repository.ConsultaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,6 +41,9 @@ class MascotaServiceTest {
 
     @Mock
     private PropietarioRepository propietarioRepository;
+
+    @Mock
+    private ConsultaRepository consultaRepository;
 
     @InjectMocks
     private MascotaServiceImpl mascotaService;
@@ -179,5 +186,80 @@ class MascotaServiceTest {
 
         assertNotNull(response);
         assertEquals("Hembra", response.getSexo());
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // RF-10: PRUEBAS DE FICHA COMPLETA DE LA MASCOTA
+    // ──────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("RF-10.1: Debe obtener la ficha completa con el peso más reciente registrado en consultas médicas")
+    void obtenerPorId_existente_conPesoDeConsulta_retornaFichaConPesoReciente() {
+        Mascota mascotaPersistida = new Mascota(
+                MASCOTA_ID,
+                propietarioExistente,
+                "Firulais",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("28.50"), // Peso inicial
+                true
+        );
+
+        when(mascotaRepository.findById(MASCOTA_ID)).thenReturn(Optional.of(mascotaPersistida));
+        when(consultaRepository.findPesosRecientesPorMascotaId(MASCOTA_ID))
+                .thenReturn(List.of(new BigDecimal("30.25"), new BigDecimal("29.10")));
+
+        MascotaResponse response = mascotaService.obtenerPorId(MASCOTA_ID);
+
+        assertNotNull(response);
+        assertEquals(MASCOTA_ID, response.getId());
+        assertEquals("Firulais", response.getNombre());
+        assertEquals("Golden Retriever", response.getRaza());
+        assertEquals("Carlos Mendoza Ramos", response.getPropietarioNombre());
+        assertEquals(new BigDecimal("30.25"), response.getPesoActualKg(), "Debe reflejar el peso de la consulta médica más reciente");
+
+        verify(mascotaRepository, times(1)).findById(MASCOTA_ID);
+        verify(consultaRepository, times(1)).findPesosRecientesPorMascotaId(MASCOTA_ID);
+    }
+
+    @Test
+    @DisplayName("RF-10.2: Debe retornar el peso inicial si la mascota aún no tiene consultas médicas registradas")
+    void obtenerPorId_existente_sinConsultas_retornaFichaConPesoInicial() {
+        Mascota mascotaPersistida = new Mascota(
+                MASCOTA_ID,
+                propietarioExistente,
+                "Firulais",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("28.50"),
+                true
+        );
+
+        when(mascotaRepository.findById(MASCOTA_ID)).thenReturn(Optional.of(mascotaPersistida));
+        when(consultaRepository.findPesosRecientesPorMascotaId(MASCOTA_ID))
+                .thenReturn(Collections.emptyList());
+
+        MascotaResponse response = mascotaService.obtenerPorId(MASCOTA_ID);
+
+        assertNotNull(response);
+        assertEquals(new BigDecimal("28.50"), response.getPesoActualKg(), "Debe conservar el peso registrado inicialmente");
+    }
+
+    @Test
+    @DisplayName("RF-10.3: Debe lanzar ResourceNotFoundException (404) si la mascota no existe")
+    void obtenerPorId_inexistente_lanzaNotFound() {
+        UUID inexistente = UUID.randomUUID();
+        when(mascotaRepository.findById(inexistente)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> mascotaService.obtenerPorId(inexistente));
+
+        verify(mascotaRepository, times(1)).findById(inexistente);
+        verify(consultaRepository, never()).findPesosRecientesPorMascotaId(any());
     }
 }
