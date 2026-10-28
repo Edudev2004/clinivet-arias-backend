@@ -6,6 +6,12 @@ import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.MascotaUpdateRequest;
 import com.clinivet.arias.dto.VacunaAplicadaRequest;
 import com.clinivet.arias.dto.VacunaAplicadaResponse;
+import com.clinivet.arias.dto.HistorialConsultaResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.service.IMascotaService;
 import com.clinivet.arias.service.IVacunaService;
@@ -32,6 +38,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -75,6 +82,7 @@ class MascotaControllerTest {
 
         mockMvc = MockMvcBuilders.standaloneSetup(mascotaController)
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
 
@@ -434,5 +442,67 @@ class MascotaControllerTest {
         mockMvc.perform(get("/api/mascotas/{id}/vacunas", MASCOTA_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].nombreVacuna").value("Séxtuple Canina"));
+    }
+
+    // ========================================================
+    // RF-25 y RF-26: Historial clinico completo con filtros
+    // ========================================================
+
+    @Test
+    @DisplayName("GET /api/mascotas/{id}/historial: Retorna 200 OK con el historial clinico paginado (RF-25)")
+    void obtenerHistorial_retorna200() throws Exception {
+        HistorialConsultaResponse item = new HistorialConsultaResponse(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                LocalDateTime.of(2026, 10, 20, 10, 0),
+                UUID.randomUUID(),
+                "Patricia Gomez",
+                "Control general",
+                "Gastroenteritis",
+                new BigDecimal("28.50"),
+                new BigDecimal("38.5"),
+                "Observaciones",
+                List.of(),
+                List.of(),
+                LocalDateTime.now()
+        );
+
+        when(mascotaService.obtenerHistorial(eq(MASCOTA_ID), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(item), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/mascotas/{id}/historial", MASCOTA_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].diagnostico").value("Gastroenteritis"))
+                .andExpect(jsonPath("$.content[0].veterinarioNombre").value("Patricia Gomez"));
+    }
+
+    @Test
+    @DisplayName("GET /api/mascotas/{id}/historial: Retorna 200 OK cuando se aplican filtros de fecha y veterinario (RF-26)")
+    void obtenerHistorial_conFiltros_retorna200() throws Exception {
+        UUID vetId = UUID.randomUUID();
+
+        when(mascotaService.obtenerHistorial(eq(MASCOTA_ID), any(LocalDate.class), any(LocalDate.class), eq(vetId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        mockMvc.perform(get("/api/mascotas/{id}/historial", MASCOTA_ID)
+                        .param("fechaInicio", "2026-10-01")
+                        .param("fechaFin", "2026-10-31")
+                        .param("veterinarioId", vetId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content").isEmpty());
+    }
+
+    @Test
+    @DisplayName("GET /api/mascotas/{id}/historial: Retorna 404 Not Found cuando la mascota no existe (RF-25)")
+    void obtenerHistorial_noExiste_retorna404() throws Exception {
+        UUID inexistente = UUID.randomUUID();
+
+        when(mascotaService.obtenerHistorial(eq(inexistente), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenThrow(new ResourceNotFoundException("Mascota no encontrada con ID: " + inexistente));
+
+        mockMvc.perform(get("/api/mascotas/{id}/historial", inexistente))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
     }
 }

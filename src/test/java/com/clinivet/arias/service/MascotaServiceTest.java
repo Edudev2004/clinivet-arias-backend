@@ -10,6 +10,16 @@ import com.clinivet.arias.repository.PropietarioRepository;
 import com.clinivet.arias.service.impl.MascotaServiceImpl;
 import com.clinivet.arias.exception.ResourceNotFoundException;
 import com.clinivet.arias.repository.ConsultaRepository;
+import com.clinivet.arias.dto.HistorialConsultaResponse;
+import com.clinivet.arias.model.*;
+import com.clinivet.arias.repository.CitaRepository;
+import com.clinivet.arias.repository.TratamientoRepository;
+import com.clinivet.arias.repository.VacunaAplicadaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,6 +57,15 @@ class MascotaServiceTest {
 
     @Mock
     private ConsultaRepository consultaRepository;
+
+    @Mock
+    private CitaRepository citaRepository;
+
+    @Mock
+    private TratamientoRepository tratamientoRepository;
+
+    @Mock
+    private VacunaAplicadaRepository vacunaAplicadaRepository;
 
     @InjectMocks
     private MascotaServiceImpl mascotaService;
@@ -413,5 +432,118 @@ class MascotaServiceTest {
         assertEquals("Hembra", response.getSexo());
         assertEquals("https://fotos.com/luna.jpg", response.getFotoUrl());
         assertFalse(response.getActivo());
+    }
+
+    // ========================================================
+    // RF-25 y RF-26: Historial clinico completo con filtros
+    // ========================================================
+
+    @Test
+    @DisplayName("RF-25: Consulta exitosa de historial completo con diagnostico, tratamientos y vacunas")
+    void obtenerHistorial_exitoso() {
+        UUID consultaId = UUID.randomUUID();
+        UUID citaId = UUID.randomUUID();
+        UUID vetId = UUID.randomUUID();
+
+        Usuario usuarioVet = new Usuario();
+        usuarioVet.setNombre("Patricia");
+        usuarioVet.setApellido("Gomez");
+
+        Veterinario vet = new Veterinario();
+        vet.setId(vetId);
+        vet.setUsuario(usuarioVet);
+
+        Cita cita = new Cita();
+        cita.setId(citaId);
+        cita.setFechaHora(LocalDateTime.of(2026, 10, 20, 10, 0));
+        cita.setVeterinario(vet);
+
+        Consulta consulta = new Consulta(
+                consultaId,
+                citaId,
+                new BigDecimal("28.50"),
+                new BigDecimal("38.5"),
+                "Control general",
+                "Gastroenteritis leve",
+                "Observaciones de control"
+        );
+        consulta.setCreatedAt(LocalDateTime.of(2026, 10, 20, 10, 30));
+
+        Medicamento med = new Medicamento();
+        med.setId(UUID.randomUUID());
+        med.setNombre("Amoxicilina");
+        med.setPrincipioActivo("Amoxicilina trihidrato");
+
+        Tratamiento tratamiento = new Tratamiento(
+                UUID.randomUUID(),
+                consulta,
+                med,
+                new BigDecimal("12.50"),
+                new BigDecimal("356.25"),
+                7,
+                "Tomar cada 12h"
+        );
+
+        VacunaCatalogo cat = new VacunaCatalogo(UUID.randomUUID(), "Sextuple", "Vacuna canina");
+        Mascota mascota = new Mascota();
+        mascota.setId(MASCOTA_ID);
+        mascota.setNombre("Firulais");
+
+        VacunaAplicada vacuna = new VacunaAplicada(
+                UUID.randomUUID(),
+                mascota,
+                cat,
+                consulta,
+                vet,
+                LocalDate.of(2026, 10, 20),
+                LocalDate.of(2027, 10, 20)
+        );
+
+        when(mascotaRepository.existsById(MASCOTA_ID)).thenReturn(true);
+        when(consultaRepository.findHistorialPorMascota(eq(MASCOTA_ID), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(consulta)));
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(cita));
+        when(tratamientoRepository.findByConsultaIdOrderByCreatedAtAsc(consultaId)).thenReturn(List.of(tratamiento));
+        when(vacunaAplicadaRepository.findByConsultaId(consultaId)).thenReturn(List.of(vacuna));
+
+        Page<HistorialConsultaResponse> pagina = mascotaService.obtenerHistorial(
+                MASCOTA_ID, null, null, null, PageRequest.of(0, 20));
+
+        assertNotNull(pagina);
+        assertEquals(1, pagina.getTotalElements());
+        HistorialConsultaResponse item = pagina.getContent().get(0);
+        assertEquals(consultaId, item.getConsultaId());
+        assertEquals("Gastroenteritis leve", item.getDiagnostico());
+        assertEquals("Patricia Gomez", item.getVeterinarioNombre());
+        assertEquals(1, item.getTratamientos().size());
+        assertEquals(1, item.getVacunas().size());
+    }
+
+    @Test
+    @DisplayName("RF-25: Lanza ResourceNotFoundException si la mascota no existe al consultar historial")
+    void obtenerHistorial_mascotaInexistente_lanza404() {
+        when(mascotaRepository.existsById(MASCOTA_ID)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class, () ->
+                mascotaService.obtenerHistorial(MASCOTA_ID, null, null, null, PageRequest.of(0, 20)));
+    }
+
+    @Test
+    @DisplayName("RF-26: Consulta de historial con filtros combinados de fecha y veterinario")
+    void obtenerHistorial_conFiltros() {
+        UUID vetId = UUID.randomUUID();
+        LocalDate inicio = LocalDate.of(2026, 10, 1);
+        LocalDate fin = LocalDate.of(2026, 10, 31);
+
+        when(mascotaRepository.existsById(MASCOTA_ID)).thenReturn(true);
+        when(consultaRepository.findHistorialPorMascota(
+                eq(MASCOTA_ID), eq(vetId), any(LocalDateTime.class), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(Collections.emptyList()));
+
+        Page<HistorialConsultaResponse> pagina = mascotaService.obtenerHistorial(
+                MASCOTA_ID, inicio, fin, vetId, PageRequest.of(0, 20));
+
+        assertNotNull(pagina);
+        assertEquals(0, pagina.getTotalElements());
     }
 }
