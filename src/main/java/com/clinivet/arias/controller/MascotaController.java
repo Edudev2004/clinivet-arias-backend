@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -47,6 +48,18 @@ public class MascotaController {
     public ResponseEntity<MascotaResponse> registrar(@Valid @RequestBody MascotaCreateRequest request) {
         MascotaResponse response = mascotaService.registrar(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping
+    @Operation(summary = "Listar todas las mascotas activas (RF-10 / RF-12)",
+            description = "Retorna el listado completo de pacientes y mascotas activas con su peso más reciente registrado.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Listado de mascotas obtenido exitosamente",
+                    content = @Content(schema = @Schema(implementation = MascotaResponse.class)))
+    })
+    public ResponseEntity<List<MascotaResponse>> listarTodas() {
+        List<MascotaResponse> response = mascotaService.listarTodas();
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}")

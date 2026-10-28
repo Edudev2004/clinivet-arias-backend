@@ -166,6 +166,27 @@ public class MascotaServiceImpl implements IMascotaService {
         return mapearAResponse(actualizada, actualizada.getPropietario());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<MascotaResponse> listarTodas() {
+        log.debug("Consultando listado de todas las mascotas activas (RF-10 / RF-12)");
+        List<Mascota> mascotas = mascotaRepository.findByActivoTrue();
+        return mascotas.stream()
+                .map(m -> {
+                    BigDecimal pesoMasReciente = m.getPesoActualKg();
+                    if (consultaRepository != null) {
+                        List<BigDecimal> pesos = consultaRepository.findPesosRecientesPorMascotaId(m.getId());
+                        if (pesos != null && !pesos.isEmpty() && pesos.get(0) != null) {
+                            pesoMasReciente = pesos.get(0);
+                        }
+                    }
+                    MascotaResponse res = mapearAResponse(m, m.getPropietario());
+                    res.setPesoActualKg(pesoMasReciente);
+                    return res;
+                })
+                .toList();
+    }
+
     private String normalizarSexo(String sexoRaw) {
         if (sexoRaw == null) {
             return "Macho";
