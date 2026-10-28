@@ -109,6 +109,32 @@ class ConsultaServiceTest {
     }
 
     @Test
+    @DisplayName("RF-12: el peso acepta valores decimales precisos (ej. 3.75 kg) y actualiza la ficha de la mascota")
+    void registrarConsulta_PesoDecimal_ActualizaFichaMascota() {
+        BigDecimal pesoDecimal = new BigDecimal("3.75");
+        request.setPeso(pesoDecimal);
+
+        when(citaRepository.findById(citaId)).thenReturn(Optional.of(cita));
+        when(veterinarioRepository.findById(veterinarioId)).thenReturn(Optional.of(veterinario));
+        when(consultaRepository.existsByCitaId(citaId)).thenReturn(false);
+        when(mascotaRepository.findById(mascotaId)).thenReturn(Optional.of(mascota));
+        when(consultaRepository.save(any(Consulta.class))).thenAnswer(inv -> {
+            Consulta c = inv.getArgument(0);
+            c.setId(consultaId);
+            c.setCreatedAt(LocalDateTime.now());
+            return c;
+        });
+
+        ConsultaResponse response = consultaService.registrarConsulta(request);
+
+        assertNotNull(response);
+        assertEquals(pesoDecimal, response.getPesoKg());
+        assertEquals(pesoDecimal, mascota.getPesoActualKg(), "El peso de la mascota debe actualizarse exactamente al valor decimal de la consulta");
+        verify(mascotaRepository).save(mascota);
+        verify(consultaRepository).save(any(Consulta.class));
+    }
+
+    @Test
     @DisplayName("RF-12: cita inexistente lanza ResourceNotFoundException y no persiste nada")
     void registrarConsulta_CitaInexistente() {
         when(citaRepository.findById(citaId)).thenReturn(Optional.empty());

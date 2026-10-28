@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -206,6 +207,18 @@ class MascotaControllerTest {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    @Test
+    @DisplayName("GET /api/mascotas: Retorna 200 OK con listado de mascotas activas y peso vigente (RF-10 / RF-12)")
+    void listarTodas_retorna200() throws Exception {
+        when(mascotaService.listarTodas()).thenReturn(List.of(responseValida));
+
+        mockMvc.perform(get("/api/mascotas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(MASCOTA_ID.toString()))
+                .andExpect(jsonPath("$[0].nombre").value("Firulais"))
+                .andExpect(jsonPath("$[0].pesoActualKg").value(28.50));
+    }
+
     // RF-11: PRUEBAS DE ACTUALIZACIÓN DE MASCOTA (PUT /api/mascotas/{id})
     // ──────────────────────────────────────────────────────────────────────────
 
