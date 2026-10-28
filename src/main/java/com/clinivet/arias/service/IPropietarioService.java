@@ -25,4 +25,15 @@ public interface IPropietarioService {
      * @return datos del propietario
      */
     PropietarioResponse obtenerPorId(UUID id);
+
+    /**
+     * Busca propietarios por término (nombre, apellido, DNI, teléfono o UUID) de forma paginada (RF-06).
+     * Si el término es nulo o vacío, lista todos los propietarios activos.
+     * Incluye la cantidad de mascotas registradas por propietario.
+     *
+     * @param termino criterio de búsqueda
+     * @param pageable configuración de paginación y ordenamiento
+     * @return página con resultados encontrados (lista vacía si no hay coincidencias)
+     */
+    org.springframework.data.domain.Page<PropietarioResponse> buscar(String termino, org.springframework.data.domain.Pageable pageable);
 }

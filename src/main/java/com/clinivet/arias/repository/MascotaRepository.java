@@ -17,5 +17,7 @@ public interface MascotaRepository extends JpaRepository<Mascota, UUID> {
 
     List<Mascota> findByPropietarioIdAndActivoTrue(UUID propietarioId);
 
+    long countByPropietarioIdAndActivoTrue(UUID propietarioId);
+
     List<Mascota> findByActivoTrue();
 }

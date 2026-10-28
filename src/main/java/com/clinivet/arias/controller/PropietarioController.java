@@ -11,6 +11,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -48,6 +52,19 @@ public class PropietarioController {
     public ResponseEntity<PropietarioResponse> registrar(@Valid @RequestBody PropietarioCreateRequest request) {
         PropietarioResponse response = propietarioService.registrar(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping
+    @Operation(summary = "Búsqueda y listado paginado de propietarios (RF-06)",
+            description = "Busca propietarios por nombre, apellido, DNI, teléfono o UUID. Retorna lista paginada con conteo de mascotas.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Resultados encontrados (lista vacía si no hay coincidencias)")
+    })
+    public ResponseEntity<Page<PropietarioResponse>> buscar(
+            @RequestParam(name = "q", required = false) String q,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        Page<PropietarioResponse> resultados = propietarioService.buscar(q, pageable);
+        return ResponseEntity.ok(resultados);
     }
 
     @GetMapping("/{id}")
