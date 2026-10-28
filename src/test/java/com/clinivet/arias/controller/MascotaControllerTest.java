@@ -1,0 +1,166 @@
+package com.clinivet.arias.controller;
+
+import com.clinivet.arias.config.GlobalExceptionHandler;
+import com.clinivet.arias.dto.MascotaCreateRequest;
+import com.clinivet.arias.dto.MascotaResponse;
+import com.clinivet.arias.service.IMascotaService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * Pruebas unitarias de capa Web para {@link MascotaController} con MockMvc.
+ * Valida códigos HTTP y serialización JSON para:
+ * - RF-09: Registro exitoso (201), validación de campos obligatorios (400) y propietario inexistente (400 / RN-01).
+ */
+@ExtendWith(MockitoExtension.class)
+class MascotaControllerTest {
+
+    private MockMvc mockMvc;
+
+    @Mock
+    private IMascotaService mascotaService;
+
+    @InjectMocks
+    private MascotaController mascotaController;
+
+    private ObjectMapper objectMapper;
+
+    private final UUID PROPIETARIO_ID = UUID.fromString("e0000000-0000-0000-0000-000000000001");
+    private final UUID MASCOTA_ID = UUID.fromString("f0000000-0000-0000-0000-000000000001");
+    private MascotaResponse responseValida;
+
+    @BeforeEach
+    void setUp() {
+        objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+        mockMvc = MockMvcBuilders.standaloneSetup(mascotaController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
+                .build();
+
+        responseValida = new MascotaResponse(
+                MASCOTA_ID,
+                "Firulais",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("28.50"),
+                "https://storage.supabase.co/clinivet/photos/firulais.jpg",
+                true,
+                PROPIETARIO_ID,
+                "Carlos Mendoza Ramos",
+                LocalDateTime.of(2026, 10, 27, 10, 0)
+        );
+    }
+
+    @Test
+    @DisplayName("POST /api/mascotas: Retorna 201 Created cuando los datos son válidos y existe el propietario (RF-09)")
+    void registrar_retorna201() throws Exception {
+        MascotaCreateRequest request = new MascotaCreateRequest(
+                PROPIETARIO_ID,
+                "Firulais",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 3, 10),
+                new BigDecimal("28.50"),
+                "https://storage.supabase.co/clinivet/photos/firulais.jpg"
+        );
+
+        when(mascotaService.registrar(any(MascotaCreateRequest.class))).thenReturn(responseValida);
+
+        mockMvc.perform(post("/api/mascotas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(MASCOTA_ID.toString()))
+                .andExpect(jsonPath("$.nombre").value("Firulais"))
+                .andExpect(jsonPath("$.especie").value("Canino"))
+                .andExpect(jsonPath("$.raza").value("Golden Retriever"))
+                .andExpect(jsonPath("$.sexo").value("Macho"))
+                .andExpect(jsonPath("$.fechaNacimiento").value("2022-03-10"))
+                .andExpect(jsonPath("$.pesoActualKg").value(28.50))
+                .andExpect(jsonPath("$.propietarioId").value(PROPIETARIO_ID.toString()))
+                .andExpect(jsonPath("$.propietarioNombre").value("Carlos Mendoza Ramos"))
+                .andExpect(jsonPath("$.activo").value(true));
+    }
+
+    @Test
+    @DisplayName("POST /api/mascotas: Retorna 400 Bad Request cuando el propietario no existe en BD (RN-01)")
+    void registrar_propietarioInexistente_retorna400() throws Exception {
+        UUID propietarioInexistente = UUID.randomUUID();
+        MascotaCreateRequest request = new MascotaCreateRequest(
+                propietarioInexistente,
+                "Bobby",
+                "Canino",
+                "Beagle",
+                "Tricolor",
+                "Macho",
+                null,
+                null,
+                null
+        );
+
+        when(mascotaService.registrar(any(MascotaCreateRequest.class)))
+                .thenThrow(new IllegalArgumentException("El propietario con ID [" + propietarioInexistente + "] no existe en la base de datos (RN-01)"));
+
+        mockMvc.perform(post("/api/mascotas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.mensaje").value("El propietario con ID [" + propietarioInexistente + "] no existe en la base de datos (RN-01)"));
+    }
+
+    @Test
+    @DisplayName("POST /api/mascotas: Retorna 400 Bad Request cuando faltan campos obligatorios")
+    void registrar_camposFaltantes_retorna400() throws Exception {
+        MascotaCreateRequest requestInvalido = new MascotaCreateRequest(
+                null, // propietarioId nulo (RN-01)
+                "", // nombre vacío
+                "", // especie vacía
+                null,
+                null,
+                "Invalido", // sexo no permitido
+                null,
+                null,
+                null
+        );
+
+        mockMvc.perform(post("/api/mascotas")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(requestInvalido)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"));
+    }
+}
