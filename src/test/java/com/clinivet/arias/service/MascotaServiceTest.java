@@ -266,6 +266,35 @@ class MascotaServiceTest {
         verify(consultaRepository, never()).findPesosRecientesPorMascotaId(any());
     }
 
+    @Test
+    @DisplayName("RF-10 / RF-12: Debe listar todas las mascotas activas con su peso más reciente obtenido de consultas")
+    void listarTodas_retornaMascotasConPesoActualizado() {
+        Mascota mascota1 = new Mascota(
+                MASCOTA_ID,
+                propietarioExistente,
+                "Bobby",
+                "Canino",
+                "Golden Retriever",
+                "Dorado",
+                "Macho",
+                LocalDate.of(2022, 4, 10),
+                new BigDecimal("25.00"),
+                true
+        );
+
+        when(mascotaRepository.findByActivoTrue()).thenReturn(List.of(mascota1));
+        when(consultaRepository.findPesosRecientesPorMascotaId(MASCOTA_ID))
+                .thenReturn(List.of(new BigDecimal("28.50")));
+
+        List<MascotaResponse> resultado = mascotaService.listarTodas();
+
+        assertNotNull(resultado);
+        assertEquals(1, resultado.size());
+        assertEquals("Bobby", resultado.get(0).getNombre());
+        assertEquals(new BigDecimal("28.50"), resultado.get(0).getPesoActualKg());
+        verify(mascotaRepository, times(1)).findByActivoTrue();
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // RF-11: PRUEBAS DE EDICIÓN DE MASCOTA
     // ──────────────────────────────────────────────────────────────────────────

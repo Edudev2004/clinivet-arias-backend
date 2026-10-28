@@ -4,6 +4,7 @@ import com.clinivet.arias.dto.MascotaCreateRequest;
 import com.clinivet.arias.dto.MascotaResponse;
 import com.clinivet.arias.dto.MascotaUpdateRequest;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -41,4 +42,11 @@ public interface IMascotaService {
      * @return respuesta con los datos actualizados de la mascota
      */
     MascotaResponse actualizar(UUID id, MascotaUpdateRequest request);
+
+    /**
+     * Lista todas las mascotas activas en el sistema con su peso más reciente actualizado en consulta médica (RF-10 / RF-12).
+     *
+     * @return lista de fichas de mascotas activas con su peso vigente
+     */
+    List<MascotaResponse> listarTodas();
 }
